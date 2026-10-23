@@ -32,6 +32,3 @@ The analyses describe associations within this subset of passengers. They do not
 establish causation or held-out predictive performance. Confidence intervals assume
 independent observations and do not account for family/travel-group dependence or
 selection into this dataset.
-
-The ingestion-only version and its baseline are preserved in
-`superseded/ingestion-only/` and shipped for comparison.

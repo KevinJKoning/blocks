@@ -18,4 +18,3 @@ overview:
   - {node: logistic, block: effects}
   - {node: logistic, block: interpretation}
   - {node: logistic, block: limitations}
-runs: [superseded/ingestion-only/baseline.run.json]
