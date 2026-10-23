@@ -253,13 +253,14 @@ function renderGraph() {
     ui.drawing = null;
   }
 }
-// Show the overview, a group or a node in the report. Choosing one opens the report if it
+// Show the overview, the runs, a group or a node in the report. Choosing one opens the report if it
 // is hidden (open: false keeps it as it is).
 function select(sel, open = true) {
   const s = sel && sel.kind ? sel : { kind: "overview" };
   if (s.kind === "node" && !(s.name in nodes)) throw new Error(`no node ${s.name}`);
+  if (!["overview", "runs", "group", "node"].includes(s.kind)) throw new Error(`no page ${s.kind}`);
   if (s.kind === "group" && !(s.name in groups)) throw new Error(`no group ${s.name}`);
-  state.sel = { kind: s.kind, name: s.kind === "overview" ? null : s.name };
+  state.sel = { kind: s.kind, name: ["overview", "runs"].includes(s.kind) ? null : s.name };
   if (open && !state.reportShown && ui.body) setReportShown(true);
   renderGraph(); renderReport();
   if (ui.report) ui.report.scrollTop = 0;

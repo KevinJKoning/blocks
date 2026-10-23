@@ -372,11 +372,6 @@ function runFile(name) {
   if (!current()) throw new Error("run the whole graph first: a run file records a complete, current run");
   return name ? { ...state.current, name } : state.current;
 }
-function downloadRun() {
-  const run = runFile();
-  download(`${manifest.name}-${run.name}.run.json`, JSON.stringify(run, null, 1), "application/json");
-  return run;
-}
 // A node's output, as JSON (views, agents): this session's; a previous run keeps blocks, not outputs.
 async function readOutput(name) {
   if (!(name in nodes)) throw new Error(`no node ${name}`);

@@ -1,8 +1,8 @@
 // modals.js: the header's Data and Settings modals.
 
 // ------------------------------------------------------------------ modals
-// Data: the datasets (swap a file to run on other data), and previous runs (run files to
-// compare this run with). Settings: two sections, Graph (every node's settings, in graph
+// Data: the datasets (swap a file to run on other data); runs have their own page
+// (runs.js). Settings: two sections, Graph (every node's settings, in graph
 // order; each node's are also live on its page) and App (theme, report, plugins,
 // earlier versions, this build). Each is a <dialog> that is only
 // opened and closed, never moved, so the views in it keep their state. Data opens by
@@ -55,7 +55,6 @@ const startNote = () => state.fatal ? "The runtime failed to start." : !state.re
 function renderData(top, rest, m) {
   put(top, h("p", { class: "small muted" }, "The data the nodes read. Swap a file to run on other data."));
   put(top, manifest.datasets.map(dataControl));
-  put(rest, h("h3", {}, "Previous runs"), previousRuns());
   m.note.textContent = startNote();
 }
 function renderSettings(top, rest, m) {
@@ -167,27 +166,6 @@ function dataControl(d) {
     readers.length ? h("div", { class: "small" }, "Details: ", readers.map((n, i) => [i ? ", " : "",
       h("button", { class: "btn link", onclick: () => { closeModal(); select({ kind: "node", name: n }); } }, n)])) : null,
     st.status === "converting" ? ingestStatus(d, st) : null);
-}
-
-// Previous runs are data: run files (from Download results) to compare this run with. They
-// are listed as files; their results show only next to a run of this app.
-function previousRuns() {
-  const file = h("input", { type: "file", hidden: true, multiple: true, accept: ".json", "aria-label": "Previous run files",
-    onchange: async (e) => {
-      try { await addRunFiles([...e.target.files]); } catch (err) { note.textContent = `Not loaded: ${err.message}`; note.className = "small hint warn"; }
-    } });
-  const note = h("p", { class: "small muted" }, "Run files from Download results (*.run.json), of this app or another version of it. " +
-    "Each is named after its file; rename one to baseline.run.json to make it the baseline. After a run, this run is compared with the reference.");
-  const ref = reference();
-  return h("div", { "data-previous-runs": "" }, note,
-    loaded().length ? h("table", { class: "kv runs-prev" }, h("thead", {}, h("tr", {}, h("th", {}, "reference"), h("th", {}, "run"), h("th", {}, "app"), h("th", {}, "made"), h("th", {}, ""))),
-      h("tbody", {}, loaded().map((r) => h("tr", { "data-run-file": r.name },
-        h("td", {}, h("input", { type: "radio", name: "reference", checked: ref === r, "aria-label": `Compare with ${r.name}`, onchange: () => setReference(r.name) })),
-        h("td", { class: "mono" }, r.name, r.from === "app" ? h("span", { class: "muted" }, " · shipped with the app") : null),
-        h("td", { class: "small" }, sameApp(r) ? "this app" : r.doc.app),
-        h("td", { class: "small" }, String(r.doc.made || "").slice(0, 16).replace("T", " ")),
-        h("td", {}, h("button", { class: "btn link", "data-action": "remove-run", onclick: () => removeRun(r.name) }, "remove")))))) : null,
-    file, h("button", { class: "btn", "data-action": "add-runs", onclick: () => file.click() }, "Add run files…"));
 }
 
 function about() {

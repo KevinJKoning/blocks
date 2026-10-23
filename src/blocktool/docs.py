@@ -47,13 +47,17 @@ def overview_page(a: dict) -> list[dict]:
     out.append(ui.changes())
     out += [ui.pick(o["node"], o["block"]) for o in a["overview"]]
     out.append(ui.views())
+    out.append(ui.runs_link())
     out += [ui.markdown(a["files"][doc].decode(), doc=doc) for doc in a["docs"]]
-    out.append(ui.runs())
     about = [ui.dataset(d, brief=True) for d in a["datasets"]] + [ui.contents(a["graph"]["order"])]
     return out + [ui.fold("about-app", "About this app", about)]
 
 
+def runs_page(a: dict) -> list[dict]:
+    return [ui.runs()]
+
+
 def pages(a: dict) -> dict:
-    return {"overview": overview_page(a),
+    return {"overview": overview_page(a), "runs": runs_page(a),
             "groups": {g: group_page(a, g) for g in a["groups"]},
             "nodes": {n: node_page(a, n) for n in a["graph"]["order"]}}

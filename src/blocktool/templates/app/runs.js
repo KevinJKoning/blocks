@@ -1,13 +1,16 @@
-// runs.js: runs as data, and the one this run is compared with (docs/runs.md).
+// runs.js: runs as data, the one this run is compared with, and the one the report shows
+// (docs/runs.md).
 //
 // A run is a run file (blocks-run/1), made by the worker after every run (blocks.runs):
 // the settings and data, and per node its metrics, output digest and blocks. The page keeps
 // one list of them, state.runs, each {name, doc, from}: this session's runs ("session"),
 // earlier ones from the dev server's run log ("log"), the ones the app ships ("app", e.g.
-// its baseline or a superseded version's) and files the viewer loads ("file"). This run is
-// compared with one of them, the reference: the one the viewer picked, else the one named
-// "baseline", else the latest that is not this session's. Every comparison comes from the
-// worker (blocks.runs.compare, summarize); this file keeps the list and draws none of it.
+// its baseline or a superseded version's) and files the viewer loads ("file"). The Runs
+// page shows the list. This run is compared with one of them, the reference: the one the
+// viewer picked, else the one named "baseline", else the latest that is not this
+// session's. The viewer can also view one: the whole report then shows that run's results
+// instead of this session's, until they go back. Every comparison comes from the worker
+// (blocks.runs.compare, summarize); this file keeps the list and draws none of it.
 
 const RUN_FORMAT = manifest.run_format;   // blocks.runs.FORMAT
 const appId = manifest.id;
@@ -16,7 +19,7 @@ state.current = null;    // the run file of the graph as it now stands (complete
 state.reference = null;  // the name the viewer picked as reference (null: the default)
 state.cmp = null;        // blocks.runs.compare(state.current, reference): per node, the headline, changes
 state.summary = null;    // blocks.runs.summarize(every run, reference): per run, and the best
-state.compare = {};      // node -> true while the viewer looks at the reference's results instead
+state.viewing = null;    // the name of the run the report shows instead of this session's, or null
 const runNameOf = (fileName) => fileName.replace(/\.run\.json$/i, "").replace(/\.json$/i, "");
 const freeName = (name) => { let n = name, i = 2; while (state.runs.some((r) => r.name === n)) n = `${name}-${i++}`; return n; };
 function addRun(name, doc, from = "file") {
@@ -58,6 +61,7 @@ async function addRunFiles(files) {
 async function removeRun(name) {
   state.runs = state.runs.filter((r) => r.name !== name);
   if (state.reference === name) state.reference = null;
+  if (state.viewing === name) state.viewing = null;
   await compareRuns();
   refresh();
 }
@@ -88,13 +92,19 @@ function refNode(n) {
   return s && s.status === "done" ? s : null;
 }
 const refBlock = (n, id) => { const s = refNode(n); return s ? (s.blocks || []).find((b) => b.id === id) || null : null; };
-const comparable = (n) => ran(n) && !!refNode(n);
-// Which version of a node's results the report shows: "run", "reference", or null before it has run.
-const shownSide = (n) => !ran(n) ? null : state.compare[n] && comparable(n) ? "reference" : "run";
-const shownRecord = (n) => ({ run: state.node[n], reference: refNode(n) }[shownSide(n)] || null);
-function setShown(n, onReference) {
-  state.compare[n] = onReference;
-  renderReport(); notifyViews();
+const viewed = () => runByName(state.viewing);
+// Compared with the reference: this session's results of n, when the reference has some.
+const comparable = (n) => !viewed() && ran(n) && !!refNode(n);
+// Which results of a node the report shows: "run" (this session's), "viewed" (the viewed
+// run's), or null when there are none.
+const shownSide = (n) => { const v = viewed();
+  if (v) return ((v.doc.nodes || {})[n] || {}).status === "done" ? "viewed" : null;
+  return ran(n) ? "run" : null; };
+const shownRecord = (n) => ({ run: state.node[n], viewed: viewed() && (viewed().doc.nodes || {})[n] }[shownSide(n)] || null);
+function viewRun(name) {
+  if (name && !runByName(name)) throw new Error(`no run ${name}`);
+  state.viewing = name || null;
+  refresh();
 }
 // The comparison's cells (blocks.runs.cell): a node's metric, a metrics block's item, a headline metric.
 const metricCell = (n, key) => state.cmp && state.cmp.nodes[n] ? state.cmp.nodes[n].metrics[key] || null : null;

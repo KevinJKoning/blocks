@@ -79,7 +79,7 @@
 
   const api = {
     view: {},
-    state: null,     // {nodes: {name: {status, cached, shown, compare, metrics}}, data: {name: {status, original, file, path, profile, schema}},
+    state: null,     // {nodes: {name: {status, cached, shown: run|viewed, compare, metrics}}, data: {name: {status, original, file, path, profile, schema}},
                      //  reference, runs (previous runs loaded), settings, headline: [{id, label, goal, now, reference}], busy, ready}
     theme: null,
     init,            // resolves with the first state, once the host has connected

@@ -42,15 +42,24 @@ each setting, each dataset by key).
   from: this session (every run that computed something and completed), the dev server's
   run log (`runs.jsonl`, linked builds), the app (`app.yaml runs:`: its own
   `baseline.run.json` → "baseline", a superseded version's
-  `superseded/older/baseline.run.json` → "older/baseline"), and files loaded in the Data
-  modal. Runs of another project are refused.
+  `superseded/older/baseline.run.json` → "older/baseline"), and files loaded on the Runs
+  page. Runs of another project are refused.
+- **One page.** The header's **Runs** (which names the reference: "Runs · vs baseline")
+  opens the Runs page: every run, newest first, with where it comes from, what differs
+  from the reference, its headline metrics (the best of each marked), and what to do with
+  it: compare with it, view it, apply its settings, download it, remove it; and Load run
+  files…. The overview shows how many runs there are and links here.
 - **The reference.** This run is compared with one run: the one picked, else the one named
-  `baseline`, else the latest that is not this session's.
-- **After a run**, a block of this run shows the reference's block with the same node and
-  id (`docs/blocks.md`); a node's results say what changed and can switch to the
-  reference's blocks; the overview shows the headline against it and every run.
-- **Agents**: `list_runs`, `apply_run`, `sweep`, `export_run`, `add_run`, `remove_run`,
-  `set_reference`, `show_reference`, `get_overview().changes`, `get_node().comparison`.
+  `baseline`, else the latest that is not this session's. After a run, a block of this run
+  shows the reference's block with the same node and id (`docs/blocks.md`): Δ in metrics
+  and the DAG, its series dashed in charts; a node's results and the overview say what
+  changed.
+- **Viewing a run.** View on a run makes the whole report show that run's results (its
+  blocks, its headline) under a banner, until Back to this run. Views of nodes' outputs
+  are hidden meanwhile: a run file keeps blocks, not outputs.
+- **Agents**: `list_runs`, `apply_run`, `view_run`, `sweep`, `export_run`, `add_run`,
+  `remove_run`, `set_reference`, `select({runs: true})`, `get_overview().changes`,
+  `get_node().comparison`.
 
 ## Verification (tooling only, with `blocks.runs.compare`)
 

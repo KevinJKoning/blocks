@@ -98,7 +98,8 @@ def test_documentation_pages_are_blocks(repo):
     assert [b["type"] for b in p["nodes"]["evaluate"]] == ["markdown", "results", "views", "fold"]  # no settings
     assert [b["type"] for b in p["groups"]["Modelling"]] == ["markdown", "nodes", "views"]
     assert [b["type"] for b in p["overview"]] == ["markdown", "markdown", "headline", "changes", "pick", "views",
-                                                   "markdown", "runs", "fold"]
+                                                   "runs-link", "markdown", "fold"]
+    assert [b["type"] for b in p["runs"]] == ["runs"]
     assert [b["type"] for b in p["overview"][-1]["blocks"]] == ["dataset", "contents"]
 
 
@@ -106,7 +107,7 @@ def test_builds(repo):
     page, a = build.build(repo, SENSOR)
     manifest, files = build.unpack(page)
     assert build.check(page) == [] and len(page) < 600_000
-    assert manifest["mode"] == "linked" and set(manifest["pages"]) == {"overview", "groups", "nodes"}
+    assert manifest["mode"] == "linked" and set(manifest["pages"]) == {"overview", "runs", "groups", "nodes"}
     g = json.loads(files["proto/graph.json"])
     assert g["order"] == a["graph"]["order"] and g["datasets"] == {"measurements": {"at": "data/measurements.parquet"}}
     assert "project/nodes/train.py" in files and "pylib/blocks/graph.py" in files

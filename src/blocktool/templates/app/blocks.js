@@ -42,8 +42,9 @@ const BLOCKS = {
   contents: (b) => contentsList(b.nodes),
   // the overview's and a group's, made from this session's state
   headline: () => headline.length ? headlineTable() : null,
-  changes: () => reference() && state.cmp ? changesLine(reference()) : null,
+  changes: () => reference() && state.cmp && !viewed() ? changesLine(reference()) : null,
   runs: () => runsTable(),
+  "runs-link": () => runsLink(),
   nodes: (b) => nodesTable(b.nodes),
   // a block of a node's results, shown on another page (app.yaml overview:)
   pick: (b) => { const rec = state.node[b.node], blk = rec && rec.blocks && rec.blocks.find((x) => x.id === b.block);
@@ -64,7 +65,7 @@ const tableOf = (columns, rows, total) => h("div", { class: "runs-wrap" }, h("ta
 function metricsTable(b, ref, ctx) {
   if (!b.items.length) return h("p", { class: "muted small" }, "No metrics.");
   const table = (items) => h("table", { class: "kv metrics" }, h("thead", {}, h("tr", {}, h("th", {}, "metric"),
-    h("th", { class: "num" }, ctx.side === "reference" ? reference().name : "this run"),
+    h("th", { class: "num" }, ctx.side === "viewed" ? viewed().name : "this run"),
     ref ? [h("th", { class: "num" }, runLabel_(reference())), h("th", { class: "num" }, "Δ")] : null)),
     h("tbody", {}, items.map((it) => { const c = ref ? blockCell(ctx.node, b.id, it.key) : null;
       return h("tr", { "data-metric": it.key, class: it.undeclared ? "undeclared" : null },
@@ -83,34 +84,57 @@ function deltaCell(c) {
   return h("td", { class: `num delta ${c.better === null ? "changed" : c.better ? "better" : "worse"}` }, signed(c.delta));
 }
 function headlineTable() {
-  const now = headlineNow(), r = reference();
-  return h("table", { class: "kv headline" }, h("thead", {}, h("tr", {}, h("th", {}, "headline"), h("th", { class: "num" }, "this run"),
+  const v = viewed(), now = v ? v.doc.headline || {} : headlineNow(), r = v ? null : reference();
+  return h("table", { class: "kv headline" }, h("thead", {}, h("tr", {}, h("th", {}, "headline"), h("th", { class: "num" }, v ? v.name : "this run"),
     r ? [h("th", { class: "num" }, runLabel_(r)), h("th", { class: "num" }, "Δ")] : null, h("th", { class: "num" }, "goal"))),
     h("tbody", {}, headline.map((m) => { const c = headlineCell(m.id);
       return h("tr", { "data-headline": m.id }, h("td", {}, m.label), h("td", { class: "num" }, fmt(now[m.id])),
         r ? [h("td", { class: "num" }, fmt(c ? c.ref : (r.doc.headline || {})[m.id])), deltaCell(c)] : null, h("td", { class: "num small muted" }, m.goal)); })));
 }
-// Every run, newest first: where it comes from, what differs from the reference, its
-// headline metrics (the best of each marked), and a button to set its settings. The
-// comparisons are the worker's (blocks.runs.summarize).
+// The Runs page: every run, newest first, with where it comes from, what differs from the
+// reference, its headline metrics (the best of each marked), and what to do with it:
+// compare with it (the reference), view its results, apply its settings, download it,
+// remove it. The comparisons are the worker's (blocks.runs.summarize).
 const RUN_FROM = { session: "this session", log: "run log", app: "shipped with the app", file: "loaded file" };
 function runsTable() {
-  if (!state.runs.length) return h("p", { class: "small muted" }, "No runs yet. Every run that computes something is kept here", linked ? " (and in runs.jsonl on the dev server)." : ".");
-  const sum = state.summary || { rows: [], best: {} }, ref = reference();
+  const files = h("input", { type: "file", hidden: true, multiple: true, accept: ".json", "aria-label": "Run files",
+    onchange: async (e) => { try { await addRunFiles([...e.target.files]); } catch (err) { note.textContent = `Not loaded: ${err.message}`; note.className = "small hint warn"; } } });
+  const note = h("p", { class: "small muted" }, "Every run that computes something is kept here", linked ? " and in runs.jsonl on the dev server" : "",
+    ". Load run files (*.run.json) of this app or another version of it to compare with; a file named baseline.run.json is the default reference.");
+  const controls = h("div", { class: "runs-controls" }, files,
+    h("button", { class: "btn", "data-action": "add-runs", onclick: () => files.click() }, "Load run files…"),
+    state.runs.some((r) => r.from === "session") ? h("button", { class: "btn", "data-action": "download-session", onclick: () => download(`${manifest.name}-runs.json`,
+      JSON.stringify(state.runs.filter((r) => r.from === "session").map((r) => r.doc), null, 1), "application/json") }, "Download this session's runs") : null);
+  if (!state.runs.length) return [note, h("p", { class: "small muted" }, "No runs yet."), controls];
+  const sum = state.summary || { rows: [], best: {} }, ref = reference(), v = viewed();
   const rowOf = Object.fromEntries(sum.rows.map((r) => [r.name, r]));
   const runs = [...state.runs].sort((a, b) => String(b.doc.made).localeCompare(String(a.doc.made)));
-  return h("div", { class: "runs-wrap" }, h("table", { class: "kv runs" },
-    h("thead", {}, h("tr", {}, h("th", {}, "run"), h("th", {}, ref ? `changed from ${ref.name}` : "changed"),
-      headline.map((m) => h("th", { class: "num", title: `${m.id} (${m.goal})` }, m.label)), h("th", { class: "num" }, "time"), h("th", {}, ""))),
+  const act = (name, label, title, fn) => h("button", { class: "btn link", "data-action": name, title, onclick: fn }, label);
+  return [note, h("div", { class: "runs-wrap" }, h("table", { class: "kv runs" },
+    h("thead", {}, h("tr", {}, h("th", { title: "The run this one is compared with" }, "vs"), h("th", {}, "run"), h("th", {}, ref ? `changed from ${ref.name}` : "changed"),
+      headline.map((m) => h("th", { class: "num", title: `${m.id} (${m.goal})` }, m.label)))),
     h("tbody", {}, runs.slice(0, 200).map((r) => { const row = rowOf[r.name] || { changes: [] };
-      return h("tr", { "data-run": r.name, class: r === ref ? "reference" : null },
-        h("td", { class: "small" }, h("span", { class: "mono" }, r.name), h("div", { class: "muted" }, RUN_FROM[r.from] || r.from, r === ref ? " · reference" : "")),
-        h("td", { class: "small mono" }, r === ref ? "" : row.changes.length ? row.changes.map(changeText).join("; ") : h("span", { class: "muted" }, "nothing")),
-        headline.map((m) => h("td", { class: `num${sum.best[m.id] === r.name ? " best" : ""}` }, fmt((r.doc.headline || {})[m.id]))),
-        h("td", { class: "num" }, fmtSec(r.doc.seconds)),
-        h("td", {}, h("button", { class: "btn link", title: "Set these settings", onclick: () => applyRun(r.name) }, "apply"))); }))),
-    linked ? null : h("button", { class: "btn", onclick: () => download(`${manifest.name}-runs.json`,
-      JSON.stringify(state.runs.filter((r) => r.from === "session").map((r) => r.doc), null, 1), "application/json") }, "Export this session's runs (.json)"));
+      return h("tr", { "data-run": r.name, class: [r === ref ? "reference" : "", r === v ? "viewed" : ""].join(" ").trim() || null },
+        h("td", {}, h("input", { type: "radio", name: "reference", checked: r === ref, "aria-label": `Compare with ${r.name}`, onchange: () => setReference(r.name) })),
+        h("td", { class: "small run-cell" }, h("div", { class: "mono run-name", title: r.name }, r.name),
+          h("div", { class: "muted" }, RUN_FROM[r.from] || r.from, sameApp(r) ? "" : ` · ${r.doc.app}`,
+            r.doc.seconds != null ? ` · ${fmtSec(r.doc.seconds)}` : ""),
+          h("div", { class: "actions" },
+            r === v ? act("back-to-run", "back", "Show this session's results again", () => viewRun(null))
+              : act("view-run", "view", "Show this run's results in the report", () => { viewRun(r.name); select({ kind: "overview" }); }),
+            act("apply-run", "apply", "Set these settings (Run to compute them)", () => applyRun(r.name)),
+            act("download-run", "download", "Save this run file", () => download(`${manifest.name}-${r.name}.run.json`, JSON.stringify(r.doc, null, 1), "application/json")),
+            r.from === "session" ? null : act("remove-run", "remove", "Take it out of the list", () => removeRun(r.name)))),
+        h("td", { class: "small mono" }, r === ref ? h("span", { class: "muted" }, "the reference") : row.changes.length ? row.changes.map(changeText).join("; ") : h("span", { class: "muted" }, "nothing")),
+        headline.map((m) => h("td", { class: `num${sum.best[m.id] === r.name ? " best" : ""}` }, fmt((r.doc.headline || {})[m.id])))); })))),
+    controls];
+}
+// On the overview: how many runs, which is the reference, and the way to all of them.
+function runsLink() {
+  const mine = state.runs.filter((r) => r.from === "session").length, other = state.runs.length - mine, ref = reference();
+  return h("p", { class: "small", "data-runs-link": "" }, `${fmtCount(mine, "run")} this session${other ? `, ${other} loaded` : ""}`,
+    ref ? h("span", { class: "muted" }, ` · compared with ${runLabel_(ref)}`) : null, " · ",
+    h("button", { class: "btn link", "data-action": "open-runs", onclick: () => select({ kind: "runs" }) }, "All runs"));
 }
 function nodesTable(names) {
   return h("table", { class: "kv group-results" }, h("thead", {}, h("tr", {}, h("th", {}, "node"), h("th", {}, "state"), h("th", {}, "metrics"))),

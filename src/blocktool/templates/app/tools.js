@@ -54,7 +54,7 @@ async function sweep({ grid, max_runs = 50, restore = true, source = "sweep" }) 
     return [id, { value: docs[i].headline[id], settings: results[i].settings }]; }));
   return { runs: results, best, restored: restore };
 }
-const SEL = { type: "object", properties: { node: { type: "string", enum: order }, group: { type: "string", enum: groupNames } } };
+const SEL = { type: "object", properties: { node: { type: "string", enum: order }, group: { type: "string", enum: groupNames }, runs: { type: "boolean" } } };
 const tools = [
   { name: "get_overview", description: "The app's question and description, its headline metrics (with goals) for this run and the reference run, nodes with their inputs and status, groups, settings with ranges, datasets with what they hold, previous runs loaded, run count.",
     inputSchema: { type: "object", properties: {} },
@@ -75,9 +75,9 @@ const tools = [
   { name: "get_node", description: "One node: its documentation (docstring), file, inputs, settings, the metrics it declares and this run's values (and the reference's), its output's digest, its results blocks, log, error.",
     inputSchema: { type: "object", properties: { name: { type: "string", enum: order } }, required: ["name"] },
     run: ({ name }) => snapshot(name) },
-  { name: "get_report", description: "What the report shows now (the overview, a group or a node) as text; folds count only when open.",
+  { name: "get_report", description: "What the report shows now (the overview, the runs page, a group or a node) as text, and the run it shows if not this session's; folds count only when open.",
     inputSchema: { type: "object", properties: {} },
-    run: () => ({ selected: state.sel, shown: !!state.reportShown, text: ui.report ? ui.report.innerText : "" }) },
+    run: () => ({ selected: state.sel, viewing: state.viewing, shown: !!state.reportShown, text: ui.report ? ui.report.innerText : "" }) },
   { name: "get_source", description: "Read a file of the app, e.g. nodes/train.py or app.yaml (paths relative to the app).",
     inputSchema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
     run: ({ path }) => ({ path, text: textOf(has(path) ? path : `project/${path}`) }) },
@@ -119,7 +119,7 @@ const tools = [
       if (save) download(`${run.name}.run.json`, JSON.stringify(run, null, 1), "application/json");
       return { name: run.name, run, missing: [] };
     } },
-  { name: "add_run", description: "Load a run file (the JSON from export_run or Download run) as a previous run named name, to compare with.",
+  { name: "add_run", description: "Load a run file (the JSON from export_run, or a download from the Runs page) as a run named name, to compare with or view.",
     inputSchema: { type: "object", properties: { name: { type: "string" }, run: { type: "object" } }, required: ["name", "run"] },
     run: async ({ name, run }) => { addRun(name, run); await compareRuns(); refresh(); return { previous_runs: loaded().map((r) => r.name), reference: reference() && reference().name }; } },
   { name: "remove_run", description: "Remove a run from the list.",
@@ -128,10 +128,9 @@ const tools = [
   { name: "set_reference", description: "Pick the run this run is compared with, any run in list_runs (omit name for the default: \"baseline\", else the latest loaded).",
     inputSchema: { type: "object", properties: { name: { type: "string" } } },
     run: async ({ name } = {}) => { await setReference(name || null); return { reference: reference() && reference().name, changes: state.cmp ? state.cmp.changes : [] }; } },
-  { name: "show_reference", description: "In a node's results, show the reference run's blocks instead of this run's (on:false switches back).",
-    inputSchema: { type: "object", properties: { node: { type: "string", enum: order }, on: { type: "boolean" } }, required: ["node"] },
-    run: ({ node, on = true }) => { if (on && !comparable(node)) throw new Error(`${node}: no reference results to show (run it, and load a run that has it)`);
-      setShown(node, on); return { node, shown: on ? "reference" : "run" }; } },
+  { name: "view_run", description: "Show a run's results in the whole report instead of this session's (any run in list_runs); omit name to go back to this session's.",
+    inputSchema: { type: "object", properties: { name: { type: "string" } } },
+    run: ({ name } = {}) => { viewRun(name || null); return { viewing: state.viewing }; } },
   { name: "check_data", description: "Check a dataset against the schema the node that reads it declares (SCHEMA): per field the type found, empty values, range, and the rules rows break.",
     inputSchema: { type: "object", properties: { dataset: { type: "string", enum: manifest.datasets.filter((d) => d.schema).map((d) => d.name) } }, required: ["dataset"] },
     run: async ({ dataset }) => {
@@ -145,9 +144,9 @@ const tools = [
     run: ({ sql, limit }) => call("query", { sql, limit: Math.min(limit || 200, 5000) }) },
   { name: "reset", description: "Restore default settings and the original datasets.", inputSchema: { type: "object", properties: {} },
     run: async () => { await resetAll(); refresh(); return { ok: true }; } },
-  { name: "select", description: "Show the overview (no node or group), a group or a node in the report.",
+  { name: "select", description: "Show the overview (no node or group), the runs page (runs: true), a group or a node in the report.",
     inputSchema: SEL,
-    run: ({ node, group } = {}) => { select(node ? { kind: "node", name: node } : group ? { kind: "group", name: group } : { kind: "overview" });
+    run: ({ node, group, runs } = {}) => { select(node ? { kind: "node", name: node } : group ? { kind: "group", name: group } : { kind: runs ? "runs" : "overview" });
       return { selected: state.sel }; } },
   { name: "list_views", description: "The app's views (plugin.yaml views): where each is shown, what it may read and do, and its health: status (ready once it called bridge.ready), errors, CSP violations, and the summary it reports with bridge.describe.",
     inputSchema: { type: "object", properties: {} },

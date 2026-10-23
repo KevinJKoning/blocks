@@ -25,8 +25,8 @@ function viewDoc(name) {
     ["proto/view-bridge.js", ...v.code].map((p) => `<script>${textOf(p)}${END_SCRIPT}`).join("") + "</body></html>";
 }
 function viewSnapshot() {
-  // Per node: its status and metrics (shown: "run", or "reference" while the viewer looks at
-  // the reference run's results; compare: the reference has results for it). Per dataset:
+  // Per node: its status and metrics (shown: "run", or "viewed" while the viewer views
+  // another run's results; compare: the reference has results for it). Per dataset:
   // its state, profile and schema check. reference and runs: the previous runs loaded.
   const r = reference(), now = headlineNow();
   return { nodes: Object.fromEntries(order.map((n) => [n, { status: state.node[n].status, cached: !!state.node[n].cached,
@@ -64,7 +64,9 @@ function mountView(name) {
   return f.wrap;
 }
 const viewSel = (v) => ({ kind: v.at.kind, name: v.at.target });
-const viewHere = (v) => v.at.kind !== "data" && v.at.kind === state.sel.kind && (v.at.target || null) === (state.sel.name || null);
+// A view of nodes' outputs shows this session's: hidden while the report shows another run.
+const viewHere = (v) => v.at.kind !== "data" && v.at.kind === state.sel.kind && (v.at.target || null) === (state.sel.name || null)
+  && (v.before_run || !viewed());
 // A result view has something to show once every node it reads has run.
 const viewCanShow = (v) => v.before_run || resultsAvailable(viewSel(v)) && v.reads.every((n) => ran(n));
 function showReportViews() {

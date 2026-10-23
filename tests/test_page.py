@@ -39,7 +39,7 @@ def page_blocks(page):
 def test_before_a_run_the_app_describes_itself(server, open_app):
     page = open_app(app_url(server))
     assert open_modal(page) is None
-    assert page.locator('[data-action="download-run"]').is_disabled()
+    assert page.locator('[data-action="runs"]').inner_text() == "Runs · vs baseline"         # the reference, from the start
     assert page.locator('[data-action="auto"]').count() == 0                      # nothing runs until Run
     assert {page.locator(".dag .node").nth(i).get_attribute("data-status") for i in range(5)} == {"pending"}
     ev = node_text(page, "evaluate")
@@ -50,7 +50,7 @@ def test_before_a_run_the_app_describes_itself(server, open_app):
     assert page.locator(".report [role=tab]").count() == 0                       # one page, no tabs
     text = page.locator(".report").inner_text()
     assert "Which calibration curve" in text and "HEADLINE METRICS" in text
-    assert page.locator('.report [data-run="baseline"]').count() == 1            # the runs: the app's baseline so far
+    assert "1 loaded · compared with baseline" in page.locator(".report [data-runs-link]").inner_text()
     assert "ABOUT THIS APP" in text and "CONTENTS" not in text                   # folded until opened
     page.click('.report [data-fold="about-app"] > summary')
     assert "CONTENTS" in page.locator(".report").inner_text()
@@ -112,31 +112,44 @@ def test_results_are_each_nodes_blocks(server, open_app):
     assert block_ids(page) == ["metrics"]
 
 
-def test_previous_runs_are_data_compared_after_a_run(server, open_app, tmp_path):
+def test_runs_live_on_one_page(server, open_app, tmp_path):
     page = open_app(app_url(server))
     ov = tool(page, "get_overview")
     assert [r["name"] for r in ov["previous_runs"]] == ["baseline"] and ov["reference"] == "baseline"
     assert tool(page, "set_settings", {"values": {"featurize.degree": 1}, "run": True})["ok"]
     ev = tool(page, "get_node", {"name": "evaluate"})
-    assert ev["reference"] == "baseline" and ev["compare"] and ev["showing"] == "run"
+    assert ev["reference"] == "baseline" and ev["compare"] and ev["showing"] == "run" and ev["comparison"]["verdict"] == "differs"
     tool(page, "select", {"node": "evaluate"})
     assert "featurize.degree 3 → 1" in page.locator(".report [data-changes]").inner_text()
     assert page.locator('.report [data-plot="curve"] svg.chart .base').count() > 0
     assert page.locator(".report table.metrics th").all_inner_texts()[2:] == ["baseline", "Δ"]
     assert "Δ" in node_text(page, "evaluate")
-    page.click('[data-action="show-reference"]')
+    # the Runs page: this session's run and the baseline, in one table
+    page.click('[data-action="runs"]')
+    assert tool(page, "get_report")["selected"] == {"kind": "runs", "name": None}
+    names = page.evaluate("[...document.querySelectorAll('.report [data-run]')].map((r) => r.dataset.run)")
+    session = tool(page, "list_runs")["runs"][0]["name"]
+    assert names == [session, "baseline"]
+    assert "featurize.degree 3 → 1" in page.locator(f'.report [data-run="{session}"]').inner_text()
+    # view the baseline's results: the whole report shows them until going back
+    page.click('.report [data-run="baseline"] [data-action="view-run"]')
+    assert page.locator(".report [data-viewing]").count() == 1
+    tool(page, "select", {"node": "evaluate"})
     assert block_ids(page) == ["metrics", "markdown-2", "curve", "residuals"]
+    assert page.locator(".report table.metrics th").all_inner_texts()[1:] == ["baseline"]   # its values, no Δ
+    page.click('[data-action="back-to-run"]')
+    assert tool(page, "get_report")["viewing"] is None
+    # a run file loaded on the Runs page becomes the reference when picked
     exported = tool(page, "export_run")["run"]
     f = tmp_path / "degree one.run.json"
     f.write_text(json.dumps(exported))
-    page.click('[data-action="open-data"]')
-    page.set_input_files('input[type=file][aria-label="Previous run files"]', str(f))
-    page.wait_for_function("() => window.blocksApp.tools.get_overview().previous_runs.some((r) => r.name === 'degree one')")
-    page.click('dialog[data-modal="data"] [data-action="done"]')
-    assert tool(page, "set_reference", {"name": "degree one"})["reference"] == "degree one"
+    tool(page, "select", {"runs": True})
+    page.set_input_files('input[type=file][aria-label="Run files"]', str(f))
+    page.wait_for_selector('.report [data-run="degree one"]')
+    page.click('.report [data-run="degree one"] input[type=radio]')
+    page.wait_for_function("() => document.querySelector('[data-action=runs]').textContent === 'Runs · vs degree one'")
     assert tool(page, "set_settings", {"values": {"featurize.degree": 3}, "run": True})["ok"]
     tool(page, "select", {"node": "evaluate"})
-    page.click('[data-action="show-run"]')
     assert "featurize.degree 1 → 3" in page.locator(".report [data-changes]").inner_text()
     other = dict(exported, project="elsewhere")
     assert "project" in page.evaluate("(r) => Promise.resolve().then(() => window.blocksApp.tools.add_run({name: 'x', run: r})).then(() => 'added', (e) => e.message)", other)
@@ -170,8 +183,10 @@ def test_the_header_report_and_settings(server, open_app):
     assert dlg.locator('select[aria-label="Theme"]').count() == 1 and dlg.locator("[data-plugin]").count() == 1
     page.click('dialog[data-modal="settings"] [data-action="done"]')
     assert tool(page, "run")["ok"]
+    page.click('[data-action="runs"]')
+    session = tool(page, "list_runs")["runs"][0]["name"]
     with page.expect_download() as dl:
-        page.click('[data-action="download-run"]')
+        page.click(f'.report [data-run="{session}"] [data-action="download-run"]')
     run = json.loads(open(dl.value.path()).read())
     assert run["format"] == "blocks-run/1" and set(run["nodes"]) == {"prepare", "baseline", "featurize", "train", "evaluate"}
     assert run["nodes"]["evaluate"]["digest"] and "verified" not in run

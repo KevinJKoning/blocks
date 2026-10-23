@@ -44,8 +44,9 @@ found. A node without a view shows its metrics (and its output, if it is a table
 The overview: the question and description; the headline metrics (against the reference
 run, with Δ); what changed since the reference; blocks taken from nodes' views
 (`app.yaml overview: [{node, block}]`, e.g. the calibration curve from `evaluate`); its
-views; the app's docs (`docs:`); the trend over previous runs and this session's runs;
-then **About this app**, folded: the datasets and the contents. A group: its `doc`
+views; how many runs there are and the reference, linking to the Runs page; the app's
+docs (`docs:`); then **About this app**, folded: the datasets and the contents. The Runs
+page is one block, every run (`docs/runs.md`). A group: its `doc`
 (app.yaml `groups:`), then its nodes with their state and declared metrics.
 
 ## Comparison: one rule
@@ -53,5 +54,5 @@ then **About this app**, folded: the datasets and the contents. A group: its `do
 A block of a node's results also shows the reference run's block with the same node and
 id: metrics add the reference's values and Δ (better or worse by each metric's goal),
 charts draw its series dashed underneath, DAG metric lines add Δ. A node's results can
-also switch to show the reference's blocks instead. Previous runs keep blocks, not outputs,
+also be another run's: viewing a run (`docs/runs.md`) shows its blocks instead. Previous runs keep blocks, not outputs,
 so views that read outputs (`docs/views.md`) show this session's run only.

@@ -79,14 +79,15 @@ src/blocktool/             the tooling: spec, docs, build, server, harvest, veri
 
 ## The page
 
-- **Header**: the title (opens the overview), Data (datasets and previous runs), Settings
+- **Header**: the title (opens the overview), Data (the datasets), Settings
   (Graph: every node's settings; App: theme, report, plugins, earlier versions, this
-  build), Run, Download run, the report's show/hide switch.
+  build), Run, Runs (the runs page, naming the reference), the report's show/hide switch.
 - **DAG**: nodes in their groups, each with its state (`○ not run` from the start), the data
   it reads (rows, size, schema check) and its declared metrics (values and Δ after a run).
   A node selects that node, a group's label its group, the background the overview.
 - **Report**: crumb, title, the page's blocks (a node: docstring, settings, results, views,
-  then its data, links and code folded).
+  then its data, links and code folded). The runs page lists every run; viewing one shows
+  its results across the report under a banner.
 
 ## Data flow of a run
 

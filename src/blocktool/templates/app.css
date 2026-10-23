@@ -316,6 +316,17 @@ table.schema-fields tr.bad td:first-child .mono { color: var(--err); }
 .delta.better { color: var(--ok); } .delta.worse { color: var(--err); }
 table.runs tr.reference td { font-weight: 600; }
 
+/* the header's Runs (with the reference), the runs page, viewing another run */
+.cap.runs-btn { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cap.runs-btn.on { border-color: var(--accent); }
+table.runs td.run-cell { min-width: 150px; }
+table.runs .run-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
+table.runs .actions .btn.link { margin-right: 8px; font-size: 12px; }
+table.runs tr.viewed td { background: var(--accent-soft, transparent); }
+.runs-controls { display: flex; gap: 8px; margin: 12px 0 0; }
+.viewing { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--accent); border-radius: 8px; font-size: 13px; }
+
 /* settings shown live on a node's page */
 .settings-inline .param:last-child { border-bottom: 0; }
 .block-pick > div > h3 { margin-top: 0; }

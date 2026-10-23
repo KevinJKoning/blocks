@@ -146,9 +146,15 @@ def pick(node: str, block: str) -> dict:
     return _block("pick", node=node, block=block)
 
 
-def runs(title: str | None = "Runs") -> dict:
-    """Every run: where it comes from, what differs from the reference, its headline metrics."""
+def runs(title: str | None = None) -> dict:
+    """Every run (the Runs page): where it comes from, what differs from the reference, its
+    headline metrics, and what to do with it: compare with it, view it, apply, download, remove."""
     return _block("runs", title=title)
+
+
+def runs_link() -> dict:
+    """How many runs there are and which one is the reference, with a link to the Runs page."""
+    return _block("runs-link")
 
 
 def tabulate(rows, columns=None) -> tuple[list[str], list[list]]:
