@@ -13,7 +13,8 @@ Layout
 A node's positional parameters are what it reads: other nodes (by name) or datasets (by
 name). Its keyword-only parameters are its settings, with literal defaults and, optionally,
 Annotated[..., Range(...), Choices(...), Note(...)]. Its docstring documents it; METRICS,
-SCHEMA and GROUP are literal module constants; view(out) is its presentation.
+SCHEMA and GROUP are literal module constants; view(out) is its presentation, downloads(out)
+the files it offers.
 """
 from __future__ import annotations
 
@@ -135,14 +136,14 @@ def _is_doc(n) -> bool:
 
 
 def _compute_source(tree: ast.Module) -> str:
-    """What a node computes: its file without its view, its docstrings and its declarations
-    (METRICS, SCHEMA, GROUP). Changing any of those never changes results, so never makes the
-    baseline stale."""
+    """What a node computes: its file without its view and downloads, its docstrings and its
+    declarations (METRICS, SCHEMA, GROUP). Changing any of those never changes results, so
+    never makes the baseline stale."""
     import copy
     tree = copy.deepcopy(tree)
     keep = []
     for n in tree.body:
-        if _is_doc(n) or (isinstance(n, ast.FunctionDef) and n.name == "view"):
+        if _is_doc(n) or (isinstance(n, ast.FunctionDef) and n.name in ("view", "downloads")):
             continue
         if isinstance(n, (ast.Assign, ast.AnnAssign)):
             targets = n.targets if isinstance(n, ast.Assign) else [n.target]
@@ -156,7 +157,8 @@ def _compute_source(tree: ast.Module) -> str:
 
 
 def read_node(path: Path, src: str) -> dict:
-    """One node file: its function, docstring, settings, constants and whether it has a view."""
+    """One node file: its function, docstring, settings, constants, and whether it has a view
+    and downloads."""
     name = path.stem
     where = f"node {name} ({path.name})"
     if not _NAME.match(name):
@@ -184,11 +186,15 @@ def read_node(path: Path, src: str) -> dict:
     view = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "view"), None)
     if view is not None and len(view.args.args) != 1:
         raise ValueError(f"{where}: view takes one argument, the node's output")
+    downloads = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "downloads"), None)
+    if downloads is not None and len(downloads.args.args) != 1:
+        raise ValueError(f"{where}: downloads takes one argument, the node's output")
     doc = ast.get_docstring(tree) or ast.get_docstring(fn) or ""
     compute_sha = sha256(_compute_source(tree).encode())
     return {"name": name, "file": f"nodes/{path.name}", "doc": doc, "desc": doc.strip().split("\n")[0] if doc else "",
             "inputs": inputs, "settings": settings, "metrics": _metric_decls(where, name, consts.get("METRICS")),
             "schema": consts.get("SCHEMA") or {}, "group": consts.get("GROUP"), "view": view is not None,
+            "downloads": downloads is not None,
             "compute_sha": compute_sha}
 
 
@@ -468,7 +474,8 @@ def load_app(repo: Path, project: str, version: str | None = None) -> dict:
         "adapters": {d["format"]: d["adapter"]["sha256"] for d in datasets.values() if d.get("format")},
     }, sort_keys=True).encode())
     plugin_files = {p: b for pl in plugins.values() for p, b in pl["files"].items()}
-    view_srcs = {n: sha256(files[graph["nodes"][n]["file"]]) for n in graph["order"] if graph["nodes"][n]["view"]}
+    view_srcs = {n: sha256(files[graph["nodes"][n]["file"]]) for n in graph["order"]
+                 if graph["nodes"][n]["view"] or graph["nodes"][n]["downloads"]}
     ui_sha = sha256(json.dumps({"views": views, "node_files": view_srcs,
                                 "files": {p: sha256(b) for p, b in plugin_files.items()}}, sort_keys=True).encode())
     baseline = read_run(adir / BASELINE) if (adir / BASELINE).is_file() else None
@@ -478,11 +485,29 @@ def load_app(repo: Path, project: str, version: str | None = None) -> dict:
         "graph": graph, "groups": groups, "settings": settings, "datasets": datasets, "files": files,
         "metrics": [m for n in graph["order"] for m in graph["nodes"][n]["metrics"]],
         "plugins": plugins, "views": views, "packages": packages, "overview": read_overview(cfg.get("overview"), graph),
-        "verify": {**DEFAULT_TOL, **(cfg.get("verify") or {})}, "ui": cfg.get("ui") or {},
+        "verify": {**DEFAULT_TOL, **(cfg.get("verify") or {})}, "ui": read_ui(cfg.get("ui"), cfg.get("runs")),
         "docs": [d for d in cfg.get("docs") or [] if d in files], "env": cfg.get("env") or {},
         "code_sha": code_sha, "ui_sha": ui_sha, "baseline": baseline, "runs": read_shipped_runs(adir, cfg.get("runs")),
         "superseded": superseded(repo, project) if not version else [],
     }
+
+
+UI_KEYS = {"theme", "runs"}
+
+
+def read_ui(decl, shipped) -> dict:
+    """app.yaml `ui:`: the theme, and whether the app has runs (the run log, previous runs,
+    comparing with a reference; on by default). Without them a viewer changes data and
+    settings, runs, and downloads; making the app still verifies against its baseline."""
+    ui = dict(decl or {})
+    if set(ui) - UI_KEYS:
+        raise ValueError(f"ui: unknown keys {sorted(set(ui) - UI_KEYS)} (have: {sorted(UI_KEYS)})")
+    ui["runs"] = ui.get("runs", True)
+    if not isinstance(ui["runs"], bool):
+        raise ValueError("ui: runs is true or false")
+    if not ui["runs"] and shipped:
+        raise ValueError("runs: ships previous runs, but ui: runs: false turns runs off")
+    return ui
 
 
 def parse_target(t: str) -> tuple[str, str | None]:

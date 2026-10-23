@@ -39,9 +39,10 @@ def page_blocks(page):
 def test_before_a_run_the_app_describes_itself(server, open_app):
     page = open_app(app_url(server))
     assert open_modal(page) is None
-    assert page.locator('[data-action="runs"]').inner_text() == "Runs · vs baseline"         # the reference, from the start
+    assert page.locator('[data-action="runs"]').inner_text() == "Run log"
+    assert page.locator('[data-action="runs"]').get_attribute("title").endswith("Compared with: baseline")
     assert page.locator('[data-action="auto"]').count() == 0                      # nothing runs until Run
-    assert {page.locator(".dag .node").nth(i).get_attribute("data-status") for i in range(5)} == {"pending"}
+    assert {page.locator(".dag .node").nth(i).get_attribute("data-status") for i in range(6)} == {"pending"}
     ev = node_text(page, "evaluate")
     assert "○ not run" in ev and "RMSE —" in ev and "R² —" in ev
     page.wait_for_function("() => /400 rows/.test(document.querySelector('.dag .node[data-node=prepare]').textContent)")
@@ -89,7 +90,7 @@ def test_a_setting_in_the_report_runs_what_it_reaches(server, open_app):
     page.wait_for_function("() => window.blocksApp.state.node.train.status === 'stale'")
     page.click('[data-action="run"]')
     page.wait_for_function(f"() => {SESSION}.length === 2 && !window.blocksApp.state.busy")
-    assert page.evaluate(f"{SESSION}[1].doc.ran") == ["train", "evaluate"]
+    assert page.evaluate(f"{SESSION}[1].doc.ran") == ["train", "evaluate", "calibrated"]
     assert "train RMSE 0.3798" in node_text(page, "train")
     # the setting and what it changed are on one page
     assert re.search(r"train RMSE\s+0\.3798", page.locator('.report [data-block="results"]').inner_text())
@@ -124,7 +125,7 @@ def test_runs_live_on_one_page(server, open_app, tmp_path):
     assert page.locator('.report [data-plot="curve"] svg.chart .base').count() > 0
     assert page.locator(".report table.metrics th").all_inner_texts()[2:] == ["baseline", "Δ"]
     assert "Δ" in node_text(page, "evaluate")
-    # the Runs page: this session's run and the baseline, in one table
+    # the run log: this session's run and the baseline, in one table
     page.click('[data-action="runs"]')
     assert tool(page, "get_report")["selected"] == {"kind": "runs", "name": None}
     names = page.evaluate("[...document.querySelectorAll('.report [data-run]')].map((r) => r.dataset.run)")
@@ -139,7 +140,7 @@ def test_runs_live_on_one_page(server, open_app, tmp_path):
     assert page.locator(".report table.metrics th").all_inner_texts()[1:] == ["baseline"]   # its values, no Δ
     page.click('[data-action="back-to-run"]')
     assert tool(page, "get_report")["viewing"] is None
-    # a run file loaded on the Runs page becomes the reference when picked
+    # a run file loaded in the run log becomes the reference when picked
     exported = tool(page, "export_run")["run"]
     f = tmp_path / "degree one.run.json"
     f.write_text(json.dumps(exported))
@@ -147,7 +148,7 @@ def test_runs_live_on_one_page(server, open_app, tmp_path):
     page.set_input_files('input[type=file][aria-label="Run files"]', str(f))
     page.wait_for_selector('.report [data-run="degree one"]')
     page.click('.report [data-run="degree one"] input[type=radio]')
-    page.wait_for_function("() => document.querySelector('[data-action=runs]').textContent === 'Runs · vs degree one'")
+    page.wait_for_function("() => document.querySelector('[data-action=runs]').title.endsWith('Compared with: degree one')")
     assert tool(page, "set_settings", {"values": {"featurize.degree": 3}, "run": True})["ok"]
     tool(page, "select", {"node": "evaluate"})
     assert "featurize.degree 1 → 3" in page.locator(".report [data-changes]").inner_text()
@@ -188,8 +189,49 @@ def test_the_header_report_and_settings(server, open_app):
     with page.expect_download() as dl:
         page.click(f'.report [data-run="{session}"] [data-action="download-run"]')
     run = json.loads(open(dl.value.path()).read())
-    assert run["format"] == "blocks-run/1" and set(run["nodes"]) == {"prepare", "baseline", "featurize", "train", "evaluate"}
+    assert run["format"] == "blocks-run/1" and set(run["nodes"]) == {"prepare", "baseline", "featurize", "train", "evaluate", "calibrated"}
     assert run["nodes"]["evaluate"]["digest"] and "verified" not in run
+
+
+def test_download_makes_the_runs_files(server, open_app):
+    page = open_app(app_url(server))
+    assert page.locator('[data-action="open-download"]').is_disabled()          # nothing to download before a run
+    assert tool(page, "run")["ok"]
+    page.click('[data-action="open-download"]')
+    dlg = page.locator('dialog[data-modal="download"]')
+    assert dlg.locator("[data-download-node]").get_attribute("data-download-node") == "calibrated"
+    with page.expect_download() as dl:
+        dlg.locator('[data-file="calibrated.csv"]').click()
+    lines = open(dl.value.path()).read().splitlines()
+    assert lines[0] == "reading,reference,calibrated,residual" and len(lines) == 401   # the input data, results appended
+    report = tool(page, "read_file", {"node": "calibrated", "name": "calibration.md"})
+    assert report["media"] == "text/markdown" and "reference ≈ " in report["text"] and "RMSE: 0.3565" in report["text"]
+    with page.expect_download() as dl:
+        dlg.locator('[data-action="download-all"]').click()
+    import zipfile
+    with zipfile.ZipFile(dl.value.path()) as z:
+        assert sorted(z.namelist()) == ["calibrated.csv", "calibration.md", "run.json"]
+        assert json.loads(z.read("run.json"))["nodes"]["calibrated"]["files"] == ["calibrated.csv", "calibration.md"]
+    page.click('dialog[data-modal="download"] [data-action="done"]')
+    # a change makes the node's files wait for Run
+    tool(page, "set_settings", {"values": {"train.alpha": 1}})
+    tool(page, "select", {"node": "calibrated"})
+    assert page.locator('.report [data-file="calibrated.csv"]').is_disabled()
+    assert "run it first" in page.evaluate("window.blocksApp.tools.read_file({node: 'calibrated', name: 'calibrated.csv'}).then(() => '', (e) => e.message)")
+
+
+def test_an_app_without_runs(repo, server, open_app):
+    """Runs are a block: an app can leave them out and keep data, Run and Download."""
+    edit_yaml(repo / "projects" / SENSOR / "app.yaml", lambda c: (c.pop("runs"), c.update(ui={"runs": False})))
+    page = open_app(app_url(server, harvest_run=False))
+    assert page.locator('[data-action="runs"]').count() == 0 and page.locator(".report [data-runs-link]").count() == 0
+    names = page.evaluate("Object.keys(window.blocksApp.tools)")
+    assert "list_runs" not in names and "view_run" not in names and "read_file" in names
+    r = tool(page, "run")
+    assert r["ok"] and r["run"]["name"]                       # every run still has its record (run.json in the zip)
+    assert page.evaluate("window.blocksApp.state.runs.length") == 0 and tool(page, "get_overview")["reference"] is None
+    assert "Δ" not in node_text(page, "evaluate")
+    assert not page.locator('[data-action="open-download"]').is_disabled()
 
 
 PROBE = """async () => {

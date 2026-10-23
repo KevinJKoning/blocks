@@ -5,14 +5,18 @@
 // the settings and data, and per node its metrics, output digest and blocks. The page keeps
 // one list of them, state.runs, each {name, doc, from}: this session's runs ("session"),
 // earlier ones from the dev server's run log ("log"), the ones the app ships ("app", e.g.
-// its baseline or a superseded version's) and files the viewer loads ("file"). The Runs
-// page shows the list. This run is compared with one of them, the reference: the one the
+// its baseline or a superseded version's) and files the viewer loads ("file"). The run
+// log page shows the list. This run is compared with one of them, the reference: the one the
 // viewer picked, else the one named "baseline", else the latest that is not this
 // session's. The viewer can also view one: the whole report then shows that run's results
 // instead of this session's, until they go back. Every comparison comes from the worker
 // (blocks.runs.compare, summarize); this file keeps the list and draws none of it.
+//
+// Runs are a block an app can leave out (app.yaml ui: runs: false): then there is no list,
+// no reference and no run log, and a viewer changes data, runs and downloads.
 
 const RUN_FORMAT = manifest.run_format;   // blocks.runs.FORMAT
+const RUNS = manifest.ui.runs;
 const appId = manifest.id;
 state.runs = [];         // [{name, doc, from: "session" | "log" | "app" | "file"}]
 state.current = null;    // the run file of the graph as it now stands (complete or not)
@@ -31,6 +35,7 @@ function addRun(name, doc, from = "file") {
 async function keepRun(doc) {
   const name = freeName(doc.name);
   const run = { name, doc: { ...doc, name }, from: "session" };
+  if (!RUNS) return run;
   state.runs.push(run);
   if (linked && manifest.api && !harvest) {
     try { await fetch(manifest.api, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(run.doc) }); }
@@ -39,7 +44,7 @@ async function keepRun(doc) {
   return run;
 }
 async function loadRuns() {
-  if (!linked || !manifest.api) return;
+  if (!RUNS || !linked || !manifest.api) return;
   try {
     const r = await fetch(manifest.api, { cache: "no-store" });
     if (!r.ok) return;
@@ -79,7 +84,7 @@ const sameApp = (r) => r.doc.app === appId;
 const runLabel_ = (r) => `${r.name}${sameApp(r) ? "" : ` (${String(r.doc.app).split("/").pop()})`}`;
 // Ask the worker to compare this run with the reference, and every run with it.
 async function compareRuns() {
-  if (!state.ready) return;
+  if (!RUNS || !state.ready) return;
   const r = reference();
   try {
     state.cmp = state.current && r ? await call("compare", { run: state.current, ref: r.doc }) : null;

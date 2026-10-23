@@ -13,7 +13,9 @@ NODES = {
     "total": ('"""Their sum."""\nfrom blocks import ui\nMETRICS = {"total": {"label": "total", "goal": "max", "headline": True}}\n'
               'def total(numbers, *, scale=1):\n    return {"total": sum(numbers) * scale, "count": len(numbers)}\n'
               'def view(out):\n    return [ui.metrics(), ui.markdown(f"{out[\'count\']} numbers"), ui.data({"x": [1, 2]}, id="d")]\n'),
-    "square": '"""Squares."""\ndef square(numbers):\n    return [x * x for x in numbers]\n',
+    "square": ('"""Squares."""\nfrom blocks import ui\ndef square(numbers):\n    return [x * x for x in numbers]\n'
+               'def downloads(out):\n    return [ui.file("squares.csv", {"x": out, "half": [x / 2 for x in out]}), '
+               'ui.file("note.md", f"{len(out)} squares"), ui.file("squares.json", out)]\n'),
 }
 SPEC = {
     "order": ["numbers", "total", "square"],
@@ -22,7 +24,8 @@ SPEC = {
         "numbers": {"file": "nodes/numbers.py", "deps": [], "settings": {"n": {"default": 3}}, "metrics": [], "view": False},
         "total": {"file": "nodes/total.py", "deps": [{"name": "numbers", "kind": "node"}], "settings": {"scale": {"default": 1}},
                   "metrics": [{"id": "total:total", "key": "total", "label": "total", "goal": "max", "headline": True}], "view": True},
-        "square": {"file": "nodes/square.py", "deps": [{"name": "numbers", "kind": "node"}], "settings": {}, "metrics": [], "view": False},
+        "square": {"file": "nodes/square.py", "deps": [{"name": "numbers", "kind": "node"}], "settings": {}, "metrics": [], "view": False,
+                   "downloads": True},
     },
     "app": {"id": "toy", "project": "toy", "title": "Toy", "code_sha": "c0de", "runtime": {"pyodide": "0"}},
     "verify": {"rel_tol": 1e-9, "abs_tol": 1e-12},
@@ -92,6 +95,35 @@ def test_the_session_speaks_json(app):
     assert again["ran"] == [] and again["nodes"]["total"]["digest"] == rec["nodes"]["total"]["digest"]
     c = json.loads(s.compare(json.dumps(again), json.dumps(rec)))
     assert c["verified"] == "match" and c["changes"] == []
+
+
+def test_downloads_offer_files_made_only_when_asked(app):
+    s = Session(str(app), json.dumps(SPEC))
+    s.OUT = str(app / "out")                     # in the worker: its own memory (/tmp/blocks-out)
+    out = json.loads(s.run("{}", "{}"))
+    assert out["nodes"]["square"]["files"] == [{"name": "squares.csv", "title": None, "media": "text/csv"},
+                                               {"name": "note.md", "title": None, "media": "text/markdown"},
+                                               {"name": "squares.json", "title": None, "media": "application/json"}]
+    assert out["record"]["nodes"]["square"]["files"] == ["squares.csv", "note.md", "squares.json"]
+    with open(s.file("square", "squares.csv"), "rb") as f:
+        assert f.read() == b"x,half\n1,0.5\n4,2.0\n9,4.5\n"
+    with open(s.file("square", "note.md"), "rb") as f:
+        assert f.read() == b"3 squares"
+    import zipfile
+    with zipfile.ZipFile(s.bundle(json.dumps(out["record"]), "all.zip")) as z:
+        assert sorted(z.namelist()) == ["note.md", "run.json", "squares.csv", "squares.json"]
+        assert json.loads(z.read("run.json"))["format"] == runs.FORMAT
+    with pytest.raises(KeyError, match="offers no file"):
+        s.file("total", "x.csv")
+    assert ui.file_bytes(ui.file("t.csv", [{"a": 1, "b": None}, {"a": float("nan"), "b": "x"}])) == b"a,b\n1,\n,x\n"   # missing: empty
+    with pytest.raises(ValueError, match="give text or bytes"):
+        ui.file_bytes(ui.file("x.bin", {"a": 1}))
+
+
+def test_a_failing_downloads_is_reported_not_raised(app):
+    (app / "nodes" / "square.py").write_text('def square(numbers):\n    return numbers\ndef downloads(out):\n    return ["not a file"]\n')
+    r = graph_mod.Graph(str(app), SPEC).run({}, {})["square"]
+    assert r["status"] == "done" and r["files"] == [] and "ui.file" in r["files_error"]
 
 
 def run_file(app, settings):

@@ -10,6 +10,12 @@ file of a run, `compare` compares two, `summarize` compares many with a referenc
 page's worker calls them after every run; the tooling verifies with the same `compare`.
 Nothing else makes or compares runs.
 
+**Runs are a block an app can leave out**: `ui: {runs: false}` in app.yaml removes the Runs
+page, the run list, the reference and comparing (and their agent tools), for a finished
+app where a viewer changes data, runs and downloads (`docs/downloads.md`). Every run still
+has its run file (the zip of downloads carries it), and making the app still verifies
+against `baseline.run.json`; it just ships no runs (`runs:`) to compare with.
+
 ## The run file (`blocks-run/1`)
 
 | key | |
@@ -44,8 +50,8 @@ each setting, each dataset by key).
   `baseline.run.json` → "baseline", a superseded version's
   `superseded/older/baseline.run.json` → "older/baseline"), and files loaded on the Runs
   page. Runs of another project are refused.
-- **One page.** The header's **Runs** (which names the reference: "Runs · vs baseline")
-  opens the Runs page: every run, newest first, with where it comes from, what differs
+- **One page.** The header's **Run log** (its tooltip names the reference) opens the run
+  log: every run, newest first, with where it comes from, what differs
   from the reference, its headline metrics (the best of each marked), and what to do with
   it: compare with it, view it, apply its settings, download it, remove it; and Load run
   files…. The overview shows how many runs there are and links here.

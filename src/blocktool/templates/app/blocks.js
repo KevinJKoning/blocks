@@ -91,11 +91,11 @@ function headlineTable() {
       return h("tr", { "data-headline": m.id }, h("td", {}, m.label), h("td", { class: "num" }, fmt(now[m.id])),
         r ? [h("td", { class: "num" }, fmt(c ? c.ref : (r.doc.headline || {})[m.id])), deltaCell(c)] : null, h("td", { class: "num small muted" }, m.goal)); })));
 }
-// The Runs page: every run, newest first, with where it comes from, what differs from the
+// The run log: every run, newest first, with where it comes from, what differs from the
 // reference, its headline metrics (the best of each marked), and what to do with it:
 // compare with it (the reference), view its results, apply its settings, download it,
 // remove it. The comparisons are the worker's (blocks.runs.summarize).
-const RUN_FROM = { session: "this session", log: "run log", app: "shipped with the app", file: "loaded file" };
+const RUN_FROM = { session: "this session", log: "an earlier session", app: "shipped with the app", file: "loaded file" };
 function runsTable() {
   const files = h("input", { type: "file", hidden: true, multiple: true, accept: ".json", "aria-label": "Run files",
     onchange: async (e) => { try { await addRunFiles([...e.target.files]); } catch (err) { note.textContent = `Not loaded: ${err.message}`; note.className = "small hint warn"; } } });
@@ -134,7 +134,7 @@ function runsLink() {
   const mine = state.runs.filter((r) => r.from === "session").length, other = state.runs.length - mine, ref = reference();
   return h("p", { class: "small", "data-runs-link": "" }, `${fmtCount(mine, "run")} this session${other ? `, ${other} loaded` : ""}`,
     ref ? h("span", { class: "muted" }, ` · compared with ${runLabel_(ref)}`) : null, " · ",
-    h("button", { class: "btn link", "data-action": "open-runs", onclick: () => select({ kind: "runs" }) }, "All runs"));
+    h("button", { class: "btn link", "data-action": "open-runs", onclick: () => select({ kind: "runs" }) }, "Run log"));
 }
 function nodesTable(names) {
   return h("table", { class: "kv group-results" }, h("thead", {}, h("tr", {}, h("th", {}, "node"), h("th", {}, "state"), h("th", {}, "metrics"))),

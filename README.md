@@ -21,6 +21,10 @@ def train(featurize, *, alpha: Annotated[float, Range(0.0001, 10, log=True)] = 0
 
 def view(out):                            # optional: how its results look
     return [ui.metrics(), ui.chart(...)]
+
+
+def downloads(out):                       # optional: files a viewer takes away
+    return [ui.file("fit.csv", out["table"])]
 ```
 
 - **The graph is the functions' signatures**: positional parameters are inputs (other
@@ -60,15 +64,18 @@ python3.13 -m venv .venv && .venv/bin/pip install -e '.[test]' && .venv/bin/play
 
 ## Example projects
 
-- `sensor-calibration`: five nodes (prepare → featurize → train, baseline → evaluate) over a
-  small Parquet dataset with a schema; its own plugin adds a data preview that queries the
-  dataset and a residual explorer with a threshold to drag.
+- `sensor-calibration`: six nodes (prepare → featurize → train, baseline → evaluate →
+  calibrated) over a small Parquet dataset with a schema; `calibrated` offers the readings
+  with their calibrated values (CSV) and a report with the curve's equation (Markdown); its
+  own plugin adds a data preview that queries the dataset and a residual explorer.
 - `parcels`: a zipped Esri file geodatabase, converted to GeoParquet in the browser by the
-  `gdb-zip` plugin, then two nodes: parcel areas (slivers dropped) and the land-use summary.
+  `gdb-zip` plugin, then two nodes: parcel areas (slivers dropped) and the land-use summary
+  (downloadable as CSV). A finished app: no runs (`ui: {runs: false}`), just data, Run,
+  Download.
 
 ## Docs
 
-`ARCHITECTURE.md`, `AGENTS.md`, `docs/nodes.md`, `docs/blocks.md`, `docs/runs.md`,
+`ARCHITECTURE.md`, `AGENTS.md`, `docs/nodes.md`, `docs/blocks.md`, `docs/runs.md`, `docs/downloads.md`,
 `docs/plugins.md`, `docs/views.md`, `docs/dataset-adapters.md`.
 
 Derived from `compress-final`: the page format, Pyodide worker, dataset mounts and

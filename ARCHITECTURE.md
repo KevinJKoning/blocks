@@ -24,6 +24,11 @@ documentation), and everything shown is a layer of blocks over their outputs.
   settings, data keys, metrics, output digests and blocks; `blocks.runs` makes one after
   every run and holds the one rule that compares two (a block of this run shows the
   reference's block with the same node and id). The page and the tooling both use it.
+- **Downloads are separate from runs** (`docs/downloads.md`): a node's `downloads(out)`
+  offers files made from its output (the data with results appended, a report), made in
+  the worker only when downloaded, all of them zipped with the run file they come from.
+- **Runs are a block an app can leave out** (`ui: {runs: false}`): a finished app keeps
+  data, Run and Download.
 - **Plugins only for what cannot be a block**: dataset formats (Python adapters) and an
   app's own sandboxed views (`docs/plugins.md`). Nothing a plugin has runs in the page.
 - **All app code runs in Pyodide.** Native Python only reads, packs, serves and drives a
@@ -47,7 +52,7 @@ documentation), and everything shown is a layer of blocks over their outputs.
 
 ```
 projects/<project>/
-  app.yaml                 title, question, description, data, groups, plugins, overview, docs, runs, verify
+  app.yaml                 title, question, description, data, groups, plugins, overview, docs, runs, verify, ui
   nodes/<name>.py          one node each
   lib/…, *.py              helpers the nodes import
   data/                    the project's datasets
@@ -63,7 +68,7 @@ src/blocktool/             the tooling: spec, docs, build, server, harvest, veri
 | module | role |
 |---|---|
 | `blocks/__init__.py`, `markers.py` | what a node imports: `Range`, `Choices`, `Note`, `ui` |
-| `blocks/ui.py` | every block type: the ones a view returns, and the page blocks `docs.py` lays pages out with |
+| `blocks/ui.py` | every block type: the ones a view returns, and the page blocks `docs.py` lays pages out with; `ui.file` for downloads |
 | `blocks/graph.py` | the executor: loads nodes, keys, cache, runs, metrics, digests, views → blocks |
 | `blocks/runs.py` | run files: `record` one, `compare` two, `summarize` many against a reference |
 | `blocks/session.py` | what the worker calls: run (and its run file), compare runs, read an output, profile and validate data, DuckDB queries |
@@ -74,19 +79,20 @@ src/blocktool/             the tooling: spec, docs, build, server, harvest, veri
 | `blocktool/server.py` | `blocks serve`: projects index, apps rebuilt per request, `/_runtime/`, `/_data/`, runs API |
 | `blocktool/harvest.py` | headless runs (baseline, regression, offline build), verified with `blocks.runs.compare` |
 | `blocktool/plugins.py`, `plugins/gdb-zip/` | plugins: formats and views |
-| `blocktool/templates/app/*.js` | the app script: `base` (model), `runtime` (worker, datasets, running, run files), `runs` (previous runs, reference), `shell` (layout, header), `dag`, `blocks` (renderer), `report` (which blocks), `render`, `views`, `modals`, `tools`, `boot` |
+| `blocktool/templates/app/*.js` | the app script: `base` (model), `runtime` (worker, datasets, running), `runs` (the run list, reference, viewing a run), `downloads` (files and the zip), `shell` (layout, header), `dag`, `blocks` (renderer), `report` (which blocks), `render`, `views`, `modals`, `tools`, `boot` |
 | `blocktool/templates/worker.js` | the Pyodide worker: mounts with read-ahead, the session, ingest of formats |
 
 ## The page
 
 - **Header**: the title (opens the overview), Data (the datasets), Settings
   (Graph: every node's settings; App: theme, report, plugins, earlier versions, this
-  build), Run, Runs (the runs page, naming the reference), the report's show/hide switch.
+  build), Run, Download (every node's files, or all as a zip), Run log (every run and the
+  reference; when the app has runs), the report's show/hide switch.
 - **DAG**: nodes in their groups, each with its state (`○ not run` from the start), the data
   it reads (rows, size, schema check) and its declared metrics (values and Δ after a run).
   A node selects that node, a group's label its group, the background the overview.
 - **Report**: crumb, title, the page's blocks (a node: docstring, settings, results, views,
-  then its data, links and code folded). The runs page lists every run; viewing one shows
+  then its data, links and code folded). The run log lists every run; viewing one shows
   its results across the report under a banner.
 
 ## Data flow of a run

@@ -40,7 +40,7 @@ def template(name: str) -> bytes:
 
 # The page's script, kept in topic files (templates/app/) and joined into one live script
 # (one CSP hash). Order matters only for top-level statements; see app/base.js.
-APP_PARTS = ("base", "runtime", "runs", "shell", "dag", "blocks", "report", "render", "views", "modals", "tools", "boot")
+APP_PARTS = ("base", "runtime", "runs", "downloads", "shell", "dag", "blocks", "report", "render", "views", "modals", "tools", "boot")
 # The blocks library: what node files import, and the graph that runs them; written to /lib
 # in the worker.
 PYLIB = ("__init__.py", "markers.py", "ui.py", "graph.py", "runs.py", "session.py", "schema.py")
@@ -186,7 +186,7 @@ def graph_spec(a: dict, rt: Runtime) -> dict:
     """The graph as the page and the worker see it: nodes with their inputs, settings, metrics
     and docs; the edges; the order; where each dataset is mounted; what a run file records of
     the app (blocks.runs) and the tolerance runs are compared with."""
-    keep = ("name", "file", "doc", "desc", "deps", "settings", "metrics", "view", "group")
+    keep = ("name", "file", "doc", "desc", "deps", "settings", "metrics", "view", "downloads", "group")
     g = a["graph"]
     return {"order": g["order"], "edges": g["edges"], "nodes": {n: {k: g["nodes"][n][k] for k in keep} for n in g["order"]},
             "datasets": {d["name"]: {"at": d["at"]} for d in a["datasets"].values()},
@@ -216,7 +216,7 @@ def build(repo: Path, project: str, version: str | None = None, inline: bool = F
         "metrics": a["metrics"], "groups": a["groups"], "pages": docs.pages(a), "overview": a["overview"],
         "plugins": [{"name": p["name"], "title": p["title"], "description": p["description"], "builtin": p["builtin"],
                      "formats": list(p["formats"]), "views": list(p["views"])} for p in plugins.values()],
-        "ui": {"theme": theme, "themes": themes.catalog()},
+        "ui": {"theme": theme, "themes": themes.catalog(), "runs": a["ui"]["runs"]},
         "code_sha": a["code_sha"], "run_format": runs.FORMAT,
         "runs": [{"name": n, "path": f"runs/{n}{spec.RUN_SUFFIX}"} for n in a["runs"]],
         "superseded": [] if inline else [{"name": v, "url": f"/{project}/superseded/{v}/"} for v in a["superseded"]],

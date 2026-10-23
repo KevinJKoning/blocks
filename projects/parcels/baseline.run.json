@@ -4,8 +4,8 @@
  "app": "parcels",
  "project": "parcels",
  "title": "Parcel land use",
- "made": "2026-10-23T12:22:10.744Z",
- "code_sha": "6a514e4a4a8db8b2db3b747d3fa00cbbee25374a72111edbb2c2558baa624eb1",
+ "made": "2026-10-23T13:29:54.324Z",
+ "code_sha": "de500493d544ad82b88276721e281f8d8da9a0d87f2bcc9bb8a2dd1255fa03ba",
  "runtime": {
   "pyodide": "314.0.7",
   "packages": {
@@ -27,7 +27,7 @@
   "areas",
   "summary"
  ],
- "seconds": 1.5085,
+ "seconds": 1.4839,
  "complete": true,
  "settings": {
   "areas.min_area_m2": 1000
@@ -42,7 +42,7 @@
  "nodes": {
   "areas": {
    "status": "done",
-   "seconds": 1.5051,
+   "seconds": 1.4805,
    "metrics": {
     "parcels": 2000,
     "slivers_dropped": 0,
@@ -203,7 +203,8 @@
       ]
      }
     }
-   ]
+   ],
+   "files": []
   },
   "summary": {
    "status": "done",
@@ -392,6 +393,9 @@
      "total": 5,
      "id": "by-use"
     }
+   ],
+   "files": [
+    "land_use_summary.csv"
    ]
   }
  },

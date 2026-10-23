@@ -23,5 +23,6 @@ data:
 
 docs: [README.md]
 verify: {rel_tol: 1.0e-9, abs_tol: 1.0e-9}
-# Previous runs every build ships (loaded with the data, compared after a run).
-runs: [baseline.run.json]
+# A finished app: a viewer provides the data, runs and downloads. No runs to keep or
+# compare (making the app still verifies against baseline.run.json).
+ui: {runs: false}

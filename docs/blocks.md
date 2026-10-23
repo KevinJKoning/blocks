@@ -44,9 +44,9 @@ found. A node without a view shows its metrics (and its output, if it is a table
 The overview: the question and description; the headline metrics (against the reference
 run, with Δ); what changed since the reference; blocks taken from nodes' views
 (`app.yaml overview: [{node, block}]`, e.g. the calibration curve from `evaluate`); its
-views; how many runs there are and the reference, linking to the Runs page; the app's
-docs (`docs:`); then **About this app**, folded: the datasets and the contents. The Runs
-page is one block, every run (`docs/runs.md`). A group: its `doc`
+views; how many runs there are and the reference, linking to the run log; the app's
+docs (`docs:`); then **About this app**, folded: the datasets and the contents. The run
+log is one block, every run (`docs/runs.md`). A group: its `doc`
 (app.yaml `groups:`), then its nodes with their state and declared metrics.
 
 ## Comparison: one rule

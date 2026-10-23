@@ -22,10 +22,14 @@ def summary(areas):
             "value_per_ha": float(value.sum() / total_ha) if total_ha else 0.0, "by_land_use": by_use}
 
 
+def rows(out):
+    return [{"land use": u, "parcels": v["parcels"], "area (ha)": round(v["area_ha"], 2), "assessed value": round(v["value"])}
+            for u, v in sorted(out["by_land_use"].items(), key=lambda kv: -kv[1]["area_ha"])]
+
+
 def view(out):
-    rows = sorted(out["by_land_use"].items(), key=lambda kv: -kv[1]["area_ha"])
-    return [
-        ui.metrics(),
-        ui.table([{"land use": u, "parcels": v["parcels"], "area (ha)": round(v["area_ha"], 2), "assessed value": round(v["value"])}
-                  for u, v in rows], title="By land use", id="by-use"),
-    ]
+    return [ui.metrics(), ui.table(rows(out), title="By land use", id="by-use")]
+
+
+def downloads(out):
+    return [ui.file("land_use_summary.csv", rows(out), title="parcels, area and assessed value per land use")]

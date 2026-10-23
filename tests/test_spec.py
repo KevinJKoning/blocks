@@ -23,7 +23,7 @@ def edit_text(path, old, new):
 def test_the_graph_comes_from_the_signatures(repo):
     a = spec.load_app(repo, SENSOR)
     g = a["graph"]
-    assert g["order"] == ["prepare", "baseline", "featurize", "train", "evaluate"]
+    assert g["order"] == ["prepare", "baseline", "featurize", "train", "evaluate", "calibrated"]
     assert g["nodes"]["evaluate"]["deps"] == [{"name": "train", "kind": "node"}, {"name": "featurize", "kind": "node"},
                                               {"name": "baseline", "kind": "node"}]
     assert g["nodes"]["prepare"]["deps"] == [{"name": "measurements", "kind": "dataset"}]
@@ -81,11 +81,29 @@ def test_views_docs_and_declarations_never_make_the_baseline_stale(repo):
     edit_text(repo / NODES / "evaluate.py", 'title="Residuals on held-out rows"', 'title="Residuals"')        # the view
     edit_text(repo / NODES / "evaluate.py", '"""Score the calibration', '"""Score the held-out calibration')   # the docstring
     edit_text(repo / NODES / "evaluate.py", '"label": "RMSE vs baseline"', '"label": "relative RMSE"')        # METRICS
+    edit_text(repo / NODES / "calibrated.py", 'ui.file("calibration.md"', 'ui.file("report.md"')                # downloads
     after = spec.load_app(repo, SENSOR)
     assert after["code_sha"] == before["code_sha"] and after["ui_sha"] != before["ui_sha"]
     assert after["baseline"]["code_sha"] == after["code_sha"]
     edit_text(repo / NODES / "train.py", "pred = X @ w + y_mean", "pred = y_mean + X @ w")                     # the computation
     assert spec.load_app(repo, SENSOR)["code_sha"] != before["code_sha"]
+
+
+def test_downloads_are_read_and_runs_can_be_left_out(repo):
+    a = spec.load_app(repo, SENSOR)
+    assert a["graph"]["nodes"]["calibrated"]["downloads"] and not a["graph"]["nodes"]["train"]["downloads"]
+    assert a["ui"]["runs"] and docs.pages(a)["runs"] == [{"type": "runs"}]
+    edit_yaml(repo / "projects" / SENSOR / "app.yaml", lambda c: c.update(ui={"runs": False}))
+    with pytest.raises(ValueError, match="turns runs off"):
+        spec.load_app(repo, SENSOR)                            # it still ships baseline.run.json to compare with
+    edit_yaml(repo / "projects" / SENSOR / "app.yaml", lambda c: c.pop("runs"))
+    a = spec.load_app(repo, SENSOR)
+    p = docs.pages(a)
+    assert not a["ui"]["runs"] and p["runs"] == [] and "runs-link" not in [b["type"] for b in p["overview"]]
+    assert a["baseline"]                                       # making the app still verifies against it
+    edit_yaml(repo / "projects" / SENSOR / "app.yaml", lambda c: c.update(ui={"runs": "no"}))
+    with pytest.raises(ValueError, match="true or false"):
+        spec.load_app(repo, SENSOR)
 
 
 def test_documentation_pages_are_blocks(repo):

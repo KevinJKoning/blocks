@@ -4,7 +4,8 @@ and every node's output is cached by a key over its code, its settings and its i
 Changing a setting re-runs the node that reads it and what depends on it, nothing else; a
 view re-renders from the cached output without re-running anything. A node's result for
 the page is its status, seconds, metrics, a digest of its output (what verification
-compares, byte for byte) and its blocks (its view's, or default ones).
+compares, byte for byte), its blocks (its view's, or default ones) and the files its
+downloads(out) offers (their names; the bytes are made only when asked for).
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ import io
 import json
 import math
 import os
+import re
 import sys
 import time
 import traceback
@@ -22,6 +24,7 @@ import types
 from . import ui
 
 VERSION = "1"   # part of every cache key: a new executor recomputes everything
+FILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,120}")
 
 
 def dig(obj, key):
@@ -146,6 +149,7 @@ class Graph:
         self.spec = spec
         self.cache: dict[str, tuple[str, object]] = {}     # node -> (key, output)
         self.results: dict[str, dict] = {}                   # node -> its last result
+        self.files: dict[str, dict[str, dict]] = {}          # node -> {name: ui.file} of its last output
         self.modules: dict[str, types.ModuleType] = {}
         helpers = sorted(p for p in self._py_files() if not p.startswith("nodes/"))
         self.helpers_sha = hashlib.sha256("".join(self._sha(p) for p in helpers).encode()).hexdigest()
@@ -212,6 +216,7 @@ class Graph:
                 failed[name] = True
                 self.cache.pop(name, None)
                 self.results.pop(name, None)
+                self.files.pop(name, None)
                 results[name] = {"status": "error", "error": traceback.format_exc(), "seconds": round(time.perf_counter() - t0, 4),
                                  "log": out.getvalue()[-20000:] + err.getvalue()[-20000:]}
                 continue
@@ -236,8 +241,47 @@ class Graph:
             v = dig(value, m["key"])
             if v is not None:
                 metrics[m["key"]] = ui.plain(v)
+        files, files_error = self.offer(name, value)
         return {"status": "done", "seconds": seconds, "cached": cached, "settings": settings, "metrics": metrics,
-                "digest": digest(value), "blocks": self.blocks(name, value), "log": log}
+                "digest": digest(value), "blocks": self.blocks(name, value), "files": files, "log": log,
+                **({"files_error": files_error} if files_error else {})}
+
+    def offer(self, name, value):
+        """The files the node's downloads(out) offers, kept with the output; their names, titles
+        and media types for the page. A failing downloads() is reported, never raised."""
+        self.files.pop(name, None)
+        if not self.spec["nodes"][name].get("downloads"):
+            return [], None
+        old = os.getcwd()
+        try:
+            os.chdir(self.root)
+            got = list(getattr(self.module(name), "downloads")(value) or [])
+            for f in got:
+                if not (isinstance(f, dict) and f.get("type") == "file"):
+                    raise ValueError("downloads(out) returns ui.file(...) items")
+                if not FILE_NAME.fullmatch(f["name"]):
+                    raise ValueError(f"file name {f['name']!r}: letters, digits, '.', '-', '_'")
+            names = [f["name"] for f in got]
+            if len(set(names)) != len(names):
+                raise ValueError("two files with the same name")
+        except Exception:  # noqa: BLE001 - the node ran; only its downloads failed
+            return [], traceback.format_exc()
+        finally:
+            os.chdir(old)
+        self.files[name] = {f["name"]: f for f in got}
+        return [{"name": f["name"], "title": f.get("title"), "media": ui.FILE_TYPES.get(os.path.splitext(f["name"])[1].lower(),
+                 "application/octet-stream")} for f in got], None
+
+    def file(self, name, file_name) -> bytes:
+        """The bytes of one file a node offers, made from its current output."""
+        if file_name not in self.files.get(name, {}):
+            raise KeyError(f"{name} offers no file {file_name} (run it first)")
+        old = os.getcwd()
+        os.chdir(self.root)
+        try:
+            return ui.file_bytes(self.files[name][file_name])
+        finally:
+            os.chdir(old)
 
     def blocks(self, name, value):
         """The node's view of its output, with ids, metrics and data cards filled in; a node

@@ -4,8 +4,8 @@
  "app": "sensor-calibration",
  "project": "sensor-calibration",
  "title": "Sensor calibration",
- "made": "2026-10-23T12:22:13.003Z",
- "code_sha": "e0eeefe9ce47820136449c1078db403f39bb76857412d8e81ca605fafa09d954",
+ "made": "2026-10-23T13:29:56.526Z",
+ "code_sha": "5637d8d8f4b445d44768ac8ca0121f5fc3b9a4197f72ab81af5312dd790dd781",
  "runtime": {
   "pyodide": "314.0.7",
   "packages": {
@@ -21,9 +21,10 @@
   "baseline",
   "featurize",
   "train",
-  "evaluate"
+  "evaluate",
+  "calibrated"
  ],
- "seconds": 0.2823,
+ "seconds": 0.2796,
  "complete": true,
  "settings": {
   "prepare.test_fraction": 0.25,
@@ -42,7 +43,7 @@
  "nodes": {
   "prepare": {
    "status": "done",
-   "seconds": 0.2787,
+   "seconds": 0.2727,
    "metrics": {
     "n_raw": 400,
     "n_missing": 8,
@@ -1349,7 +1350,8 @@
       ]
      }
     }
-   ]
+   ],
+   "files": []
   },
   "baseline": {
    "status": "done",
@@ -1387,11 +1389,12 @@
       }
      ]
     }
-   ]
+   ],
+   "files": []
   },
   "featurize": {
    "status": "done",
-   "seconds": 0.0019,
+   "seconds": 0.0011,
    "metrics": {
     "n_features": 3,
     "condition_number": 52.280296965319835
@@ -1419,11 +1422,12 @@
       }
      ]
     }
-   ]
+   ],
+   "files": []
   },
   "train": {
    "status": "done",
-   "seconds": 0.0007,
+   "seconds": 0.0008,
    "metrics": {
     "intercept": 7.7335348275862055,
     "train_rmse": 0.3323270988337437
@@ -1450,11 +1454,12 @@
       }
      ]
     }
-   ]
+   ],
+   "files": []
   },
   "evaluate": {
    "status": "done",
-   "seconds": 0.0005,
+   "seconds": 0.0006,
    "metrics": {
     "test_rmse": 0.35649534617614814,
     "rmse_vs_baseline": 0.51357648748212,
@@ -2021,6 +2026,106 @@
      "x_label": "reading",
      "id": "residuals"
     }
+   ],
+   "files": []
+  },
+  "calibrated": {
+   "status": "done",
+   "seconds": 0.0039,
+   "metrics": {
+    "rows": 400,
+    "quality.test_rmse": 0.35649534617614814,
+    "quality.test_r2": 0.9930105066945937,
+    "quality.max_abs_error": 0.8876423246406553
+   },
+   "digest": "99334375f61fe416e5a73f7a729e5648ecb46aff9b704a7e4ba9fae676e022eb",
+   "blocks": [
+    {
+     "type": "markdown",
+     "text": "The calibration curve, for a raw reading `r`:\n\n`reference \u2248 1.00093 + 1.54552\u00b7r - 0.115392\u00b7r^2 + 0.011533\u00b7r^3`\n\nApplied to all 400 recorded readings (rows with a missing value give no calibrated value).",
+     "id": "markdown-1"
+    },
+    {
+     "type": "data",
+     "title": "Calibrated readings",
+     "id": "table",
+     "profile": {
+      "kind": "table",
+      "rows": 400,
+      "columns": [
+       {
+        "name": "reading",
+        "type": ""
+       },
+       {
+        "name": "reference",
+        "type": ""
+       },
+       {
+        "name": "calibrated",
+        "type": ""
+       },
+       {
+        "name": "residual",
+        "type": ""
+       }
+      ],
+      "head": [
+       [
+        0.0373,
+        0.3653,
+        1.0584168015612103,
+        0.6931168015612104
+       ],
+       [
+        0.0518,
+        1.1758,
+        1.0806787534475055,
+        -0.09512124655249443
+       ],
+       [
+        0.0527,
+        0.8325,
+        1.0820589531033042,
+        0.24955895310330423
+       ],
+       [
+        0.1179,
+        1.0969,
+        1.1815604968991233,
+        0.08466049689912336
+       ],
+       [
+        0.1427,
+        1.4175,
+        1.2191582195544062,
+        -0.1983417804455938
+       ],
+       [
+        0.2022,
+        0.5691,
+        1.3088104156220097,
+        0.7397104156220097
+       ],
+       [
+        0.2108,
+        0.9168,
+        1.3217047210467636,
+        0.40490472104676367
+       ],
+       [
+        0.252,
+        1.3271,
+        1.3832564189885153,
+        0.05615641898851531
+       ]
+      ]
+     }
+    }
+   ],
+   "files": [
+    "calibrated.csv",
+    "calibration.md"
    ]
   }
  },

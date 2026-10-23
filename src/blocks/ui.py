@@ -17,6 +17,12 @@ state: a view does not return them.
 
 A block's id (by default its type and position) is how a previous run's version of the same
 block is found, to compare with.
+
+A node's downloads(out) returns files (ui.file): the durable artifacts of its output, made
+only when a viewer downloads them.
+
+    def downloads(out):
+        return [ui.file("calibrated.csv", out["table"]), ui.file("calibration.md", out["report"])]
 """
 from __future__ import annotations
 
@@ -85,6 +91,57 @@ def figure(image, caption: str | None = None, id: str | None = None) -> dict:
     return _block("figure", media="image/svg+xml", data=str(image), caption=caption, id=id)
 
 
+# ------------------------------------------------------------------ files (downloads(out))
+FILE_TYPES = {".csv": "text/csv", ".tsv": "text/tab-separated-values", ".parquet": "application/vnd.apache.parquet",
+              ".json": "application/json", ".md": "text/markdown", ".txt": "text/plain", ".html": "text/html",
+              ".svg": "image/svg+xml", ".png": "image/png", ".geojson": "application/geo+json"}
+
+
+def file(name: str, value, title: str | None = None) -> dict:
+    """A file a node offers for download, made from its output when the viewer asks. By the
+    name's extension: a table (DataFrame, pyarrow Table, {column: values}, a list of dicts)
+    as .csv, .tsv, .parquet or .json; text (str) as anything; other JSON-able values as
+    .json; bytes as they are."""
+    return {"type": "file", "name": str(name), "value": value, "title": title}
+
+
+def file_bytes(f: dict) -> bytes:
+    """The bytes of a ui.file."""
+    import io
+    import json
+    import os
+    v, ext = f["value"], os.path.splitext(f["name"])[1].lower()
+    if isinstance(v, (bytes, bytearray)):
+        return bytes(v)
+    if isinstance(v, str):
+        return v.encode()
+    table = hasattr(v, "column_names") or hasattr(v, "itertuples") or (isinstance(v, list) and v and isinstance(v[0], dict)) \
+        or (isinstance(v, dict) and v and all(hasattr(x, "__len__") and not isinstance(x, (str, dict)) for x in v.values()))
+    if ext == ".parquet":
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+        t = v if hasattr(v, "column_names") else pa.Table.from_pandas(v) if hasattr(v, "itertuples") \
+            else pa.Table.from_pylist(v) if isinstance(v, list) else pa.table({k: plain(x) for k, x in v.items()})
+        buf = io.BytesIO()
+        pq.write_table(t, buf)
+        return buf.getvalue()
+    if ext in (".csv", ".tsv") and table:
+        import csv
+        columns, rows = tabulate(v)
+        out = io.StringIO()
+        w = csv.writer(out, delimiter="\t" if ext == ".tsv" else ",", lineterminator="\n")
+        w.writerow(columns)
+        blank = lambda x: "" if x is None or (isinstance(x, float) and x != x) else x   # missing values are empty cells
+        w.writerows([[blank(x) for x in r] for r in plain(rows)])
+        return out.getvalue().encode()
+    if ext in (".json", ".geojson"):
+        if table and not isinstance(v, list):
+            columns, rows = tabulate(v)
+            v = [dict(zip(columns, r)) for r in rows]
+        return json.dumps(plain(v), indent=1, default=str).encode()
+    raise ValueError(f"ui.file {f['name']}: give text or bytes for a {ext or 'extensionless'} file, or a table for .csv/.tsv/.parquet/.json")
+
+
 # ------------------------------------------------------------------ page blocks (blocktool.docs)
 def settings(keys: list[str], title: str | None = "Settings") -> dict:
     """Settings ("node.param") as live controls."""
@@ -147,13 +204,13 @@ def pick(node: str, block: str) -> dict:
 
 
 def runs(title: str | None = None) -> dict:
-    """Every run (the Runs page): where it comes from, what differs from the reference, its
+    """Every run (the run log page): where it comes from, what differs from the reference, its
     headline metrics, and what to do with it: compare with it, view it, apply, download, remove."""
     return _block("runs", title=title)
 
 
 def runs_link() -> dict:
-    """How many runs there are and which one is the reference, with a link to the Runs page."""
+    """How many runs there are and which one is the reference, with a link to the run log."""
     return _block("runs-link")
 
 

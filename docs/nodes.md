@@ -25,6 +25,10 @@ def train(featurize, *, alpha: Annotated[float, Range(0.0001, 10, log=True), Not
 
 def view(out):            # optional: its results (docs/blocks.md)
     return [ui.metrics(), ui.chart(...)]
+
+
+def downloads(out):       # optional: the files it offers (docs/downloads.md)
+    return [ui.file("fit.csv", out["table"])]
 ```
 
 | in the file | means |
@@ -37,6 +41,7 @@ def view(out):            # optional: its results (docs/blocks.md)
 | `SCHEMA = {dataset: {fields: [...]}}` | what a dataset it reads should hold (a subset of Frictionless Table Schema), checked as soon as the data loads |
 | `GROUP = "..."` | the group it is drawn in (documented in app.yaml `groups:`) |
 | `def view(out)` | how its output is shown: a list of UI blocks |
+| `def downloads(out)` | the files it offers for download: a list of `ui.file(name, value)`, made only when downloaded |
 
 The tooling reads all of this with `ast` and never runs node code natively: the graph,
 settings and declarations are known before anything runs. Constants must be literals.

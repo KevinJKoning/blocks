@@ -1,4 +1,4 @@
-// modals.js: the header's Data and Settings modals.
+// modals.js: the header's Data, Settings and Download modals.
 
 // ------------------------------------------------------------------ modals
 // Data: the datasets (swap a file to run on other data); runs have their own page
@@ -10,6 +10,7 @@
 const modals = {
   data: { label: "Data", title: "Data", render: renderData },
   settings: { label: "Settings", title: "Settings", render: renderSettings },
+  download: { label: "Download", title: "Download", render: renderDownload },   // downloads.js
 };
 state.settingsTab = "graph";
 function buildModals() {

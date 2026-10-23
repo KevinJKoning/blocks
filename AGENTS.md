@@ -15,7 +15,8 @@ The loop: edit node files, then look at the page or call its tools (`blocks serv
   the answer says what ran); `sweep({grid})` for a grid.
 - `get_node`, `read_output({node})`, `get_report` to see a result; `check_data`,
   `query_data` for the data; `list_runs`, `set_reference`, `view_run`, `apply_run`,
-  `export_run`, `add_run` for runs (every run is a run file; `docs/runs.md`). Nothing runs
+  `export_run`, `add_run` for runs (every run is a run file; `docs/runs.md`); `list_files`,
+  `read_file` for downloads. Nothing runs
   until `run` (or `run: true`).
 
 ## Writing nodes
@@ -29,6 +30,9 @@ The loop: edit node files, then look at the page or call its tools (`blocks serv
 - The docstring tops the node's page: say what it does and why, in Markdown.
 - `SCHEMA` on the node that reads a dataset; `GROUP` to group nodes (document groups in
   app.yaml `groups:`).
+- `downloads(out)` returns `ui.file(name, value)` items: what a viewer takes away (the
+  data with results appended, a report). Use it rather than a view for anything meant to
+  leave the app (`docs/downloads.md`).
 - `view(out)` returns `blocks.ui` blocks in the order a reader should see them: an input
   node its data and what it dropped, an output node its answer and its quality. Give a
   block an `id` when other pages refer to it (app.yaml `overview:`).

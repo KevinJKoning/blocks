@@ -142,9 +142,9 @@ function themePicker() {
       `${x.label} · ${m === "light" ? "Light" : "Dark"}`)))));
 }
 
-// ---- header: the app (its title opens the overview), Data, Settings, Run, Runs (the runs
-// page, with the run this one is compared with), and the report's show/hide switch.
-// Nothing moves while the app loads.
+// ---- header: the app (its title opens the overview), Data, Settings, Run, Download (when a
+// node offers files), Run log (every run, and the one this run is compared with; when the
+// app has runs), and the report's show/hide switch. Nothing moves while the app loads.
 function runLabel() {
   if (state.fatal) return "Unavailable";
   if (!state.ready) return "Loading";
@@ -164,8 +164,9 @@ function buildHeader() {
   const open = (name) => h("button", { class: "cap", "data-action": `open-${name}`, onclick: () => openModal(name) }, modals[name].label);
   ui.dataBtn = manifest.datasets.length ? open("data") : null;
   ui.runBtn = h("button", { class: "cap primary", "data-action": "run", title: state.statusText || "", onclick: runClicked });
-  ui.runsBtn = h("button", { class: "cap runs-btn", "data-action": "runs", title: "Every run: compare with one, view one, apply, download",
-    onclick: () => { select({ kind: "runs" }); setReportShown(true); } }, "Runs");
+  ui.downloadBtn = offering.length ? open("download") : null;
+  ui.runsBtn = RUNS ? h("button", { class: "cap runs-btn", "data-action": "runs", title: "Every run: compare with one, view one, apply, download its record",
+    onclick: () => { select({ kind: "runs" }); setReportShown(true); } }, "Run log") : null;
   ui.reportBtn = h("button", { class: "cap icon-only", "data-action": "toggle-report", "aria-label": "Report",
     "aria-pressed": String(state.reportShown), title: state.reportShown ? "Hide the report" : "Show the report",
     onclick: () => setReportShown(!state.reportShown) }, REPORT_ICON());
@@ -175,17 +176,20 @@ function buildHeader() {
       manifest.version ? h("span", { class: "pill" }, `superseded: ${manifest.version}`) : null,
       linked ? null : h("span", { class: "pill" }, "offline file")),
     h("nav", { class: "pills", "aria-label": "App" }, ui.dataBtn, open("settings")),
-    h("div", { class: "pills" }, ui.runBtn, ui.runsBtn, ui.reportBtn));
+    h("div", { class: "pills" }, ui.runBtn, ui.downloadBtn, ui.runsBtn, ui.reportBtn));
   renderHeader();
 }
 function renderHeader() {
   if (!ui.runBtn) return;
   ui.runBtn.textContent = runLabel();
   ui.runBtn.disabled = !canRun();
-  // Every button keeps its place from the start; Runs names the reference once there is one.
-  const ref = reference();
-  ui.runsBtn.textContent = ref ? `Runs · vs ${ref.name}` : "Runs";
-  ui.runsBtn.classList.toggle("on", state.sel.kind === "runs");
+  // Every button keeps its place and label from the start; the run log's names the reference in its tooltip.
+  if (ui.downloadBtn) ui.downloadBtn.disabled = !offering.some((n) => state.node[n].status === "done");
+  if (ui.runsBtn) {
+    const ref = reference();
+    ui.runsBtn.title = `Every run: compare with one, view one, apply, download its record${ref ? `. Compared with: ${ref.name}` : ""}`;
+    ui.runsBtn.classList.toggle("on", state.sel.kind === "runs");
+  }
   // Data asks for attention only when the viewer must act (a file to provide, or one that
   // failed), never while datasets are still loading.
   if (ui.dataBtn) ui.dataBtn.classList.toggle("attention", needsViewerData());

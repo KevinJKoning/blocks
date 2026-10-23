@@ -7,7 +7,10 @@ A run file (blocks-run/1):
 
     {format, name, app, project, title, made, code_sha, runtime, source, ran, seconds,
      complete, settings, changed_settings, data, nodes: {name: {status, seconds, metrics,
-     digest, blocks, error}}, headline}
+     digest, blocks, files, error}}, headline}
+
+`files` names what the node's downloads(out) offered: the files are made from outputs, which
+a run file does not keep.
 
 `data` is {dataset: {key, original, file}}: `key` identifies the bytes (the recorded sha256,
 a swapped file's sha256, or a format adapter's fingerprint), the same key the graph's cache
@@ -57,7 +60,7 @@ def record(spec: dict, results: dict, settings: dict, data: dict, source: str = 
     for n in spec["order"]:
         r = results.get(n) or {"status": "pending"}
         nodes[n] = {"status": r["status"], "seconds": r.get("seconds"), "metrics": r.get("metrics") or {},
-                    "digest": r.get("digest"), "blocks": r.get("blocks") or [],
+                    "digest": r.get("digest"), "blocks": r.get("blocks") or [], "files": [f["name"] for f in r.get("files") or []],
                     **({"error": r["error"]} if r.get("error") else {})}
     ran = [n for n in spec["order"] if nodes[n]["status"] == "done" and not (results.get(n) or {}).get("cached")]
     return {

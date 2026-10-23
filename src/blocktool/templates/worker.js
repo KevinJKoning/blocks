@@ -323,6 +323,9 @@ const handlers = {
   compare: ({ run, ref }) => JSON.parse(session.compare(JSON.stringify(run), JSON.stringify(ref || null))),
   summarize: ({ runs, ref }) => JSON.parse(session.summarize(JSON.stringify(runs), JSON.stringify(ref || null))),
   output: ({ name }) => JSON.parse(session.output(name)),
+  // a node's downloads(out), made into bytes only now: one file, or every file and the run file as a zip
+  file: ({ node, name }) => takeFile(session.file(node, name)),
+  bundle: ({ record, zipName }) => takeFile(session.bundle(JSON.stringify(record), zipName)),
   readText: ({ path, limit }) => readText(path, limit),
   readBytes: ({ path }) => py.FS.readFile(`${ROOT}/${path}`),
   list: ({ path }) => listFiles(`${ROOT}/${path || ""}`.replace(/\/$/, "")),
@@ -333,6 +336,13 @@ const handlers = {
   // allow is passed only when set: Pyodide turns a JS null into JsNull, not None.
   query: ({ sql, limit, allow }) => JSON.parse(allow ? session.query(sql, limit || 200, JSON.stringify(allow)) : session.query(sql, limit || 200)),
 };
+
+// A file the session wrote, read out of the worker's memory (and removed there).
+function takeFile(path) {
+  const bytes = py.FS.readFile(path);
+  py.FS.unlink(path);
+  return bytes;
+}
 
 self.onmessage = async (ev) => {
   const { id, type, ...args } = ev.data;

@@ -45,6 +45,30 @@ class Session:
     def summarize(self, runs_json, ref_json):
         return browser_json(runs.summarize(json.loads(runs_json), json.loads(ref_json), self.spec, self.spec["verify"]))
 
+    OUT = "/tmp/blocks-out"
+
+    def file(self, node, name):
+        """Make one file a node offers; returns where it was written (the worker reads it)."""
+        os.makedirs(self.OUT, exist_ok=True)
+        path = os.path.join(self.OUT, name)
+        with open(path, "wb") as f:
+            f.write(self.graph.file(node, name))
+        return path
+
+    def bundle(self, record_json, zip_name):
+        """Every file the nodes offer, and the run file they come from (run.json), as one zip;
+        returns where it was written. A name two nodes share is prefixed with the node's."""
+        import zipfile
+        os.makedirs(self.OUT, exist_ok=True)
+        path = os.path.join(self.OUT, zip_name)
+        offered = [(n, f) for n in self.spec["order"] for f in self.graph.files.get(n, {})]
+        names = [f for _, f in offered]
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+            for n, f in offered:
+                z.writestr(f if names.count(f) == 1 else f"{n}-{f}", self.graph.file(n, f))
+            z.writestr("run.json", json.dumps(json.loads(record_json), indent=1))
+        return path
+
     def output(self, name):
         return browser_json(self.graph.output(name))
 

@@ -1,5 +1,5 @@
 // report.js: the report beside the DAG (docs/blocks.md). The DAG is its table of contents:
-// the app's overview, a group, or a node; the header's Runs opens the runs page. Each is one page, a list of blocks read top to
+// the app's overview, a group, or a node; the header's Run log opens the run log. Each is one page, a list of blocks read top to
 // bottom (blocktool/docs.py): what it is, its settings, its results once it has run, its
 // views, and a fold with the reference material. Blocks are drawn by blocks.js; this file
 // draws the page around them and a node's results.
@@ -44,20 +44,20 @@ function renderReport() {
   }
 }
 function reportHead(sel) {
-  const title = sel.kind === "overview" ? manifest.title : sel.kind === "runs" ? "Runs" : sel.name;
+  const title = sel.kind === "overview" ? manifest.title : sel.kind === "runs" ? "Run log" : sel.name;
   const status = sel.kind === "node" ? h("span", { class: `pill ${state.node[sel.name].status}` }, stateLabel(sel.name))
     : sel.kind === "group" ? h("span", { class: `pill ${groupStatus(sel.name)}` }, NODE_STATUS[groupStatus(sel.name)]) : null;
   const v = viewed();
   return h("div", {},
     h("div", { class: "crumb small muted" }, sel.kind === "overview" ? "Overview" : [h("button", { class: "btn link", onclick: () => select({ kind: "overview" }) }, manifest.title), " / ",
-      sel.kind === "node" && groupOf[sel.name] ? [groupLink(groupOf[sel.name]), " / "] : null, { group: "Group", node: "Node", runs: "Runs" }[sel.kind]]),
+      sel.kind === "node" && groupOf[sel.name] ? [groupLink(groupOf[sel.name]), " / "] : null, { group: "Group", node: "Node", runs: "Run log" }[sel.kind]]),
     h("h2", {}, title, status),
     v ? h("div", { class: "viewing", "data-viewing": v.name }, h("span", {}, "Viewing run ", h("strong", { class: "mono" }, runLabel_(v)),
       h("span", { class: "muted" }, ": its results, not this session's.")),
       h("button", { class: "btn", "data-action": "back-to-run", onclick: () => viewRun(null) }, "Back to this run")) : null);
 }
 // A node's results: its run state, then the blocks its view made (this session's, or the
-// viewed run's), then its log.
+// viewed run's), the files its downloads(out) offers, then its log.
 function nodeResults(n, ctx) {
   const s = state.node[n];
   if (viewed()) {
@@ -66,8 +66,9 @@ function nodeResults(n, ctx) {
   }
   if (!ran(n) && s.status !== "error" && s.status !== "blocked")
     return h("p", { class: "small muted", "data-not-run": "" }, s.status === "running" ? "Running…" : "Not run yet: Run computes it, and what it reads.");
-  const rec = shownRecord(n);
+  const rec = shownRecord(n), files = nodes[n].downloads && ran(n) ? fileLinks(n) : null;
   return [runHeader(n), ran(n) ? renderBlocks(rec ? rec.blocks || [] : [], ctx) : null,
+    files ? h("section", { class: "block block-files" }, h("h3", {}, "Files"), files) : null,
     s.log ? h("details", { class: "fold" }, h("summary", {}, "Log"), h("pre", { class: "log" }, s.log)) : null];
 }
 // A node's run state, and the run it is compared with.

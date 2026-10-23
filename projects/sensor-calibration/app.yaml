@@ -23,6 +23,11 @@ groups:
     doc: >-
       Fits the calibration curve on the training rows and scores it on held-out rows
       against a straight-line baseline.
+  Delivery:
+    doc: >-
+      What the calibration hands over: every recorded reading with its calibrated value
+      (calibrated.csv) and the curve's equation with its quality (calibration.md), from
+      Download.
 
 # Blocks of nodes' views placed on the overview too.
 overview:

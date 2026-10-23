@@ -109,6 +109,24 @@ const tools = [
   { name: "apply_run", description: "Set the settings of a run (others back to defaults); run:true runs it.",
     inputSchema: { type: "object", properties: { name: { type: "string" }, run: { type: "boolean" } }, required: ["name"] },
     run: ({ name, run }) => applyRun(name, run) },
+  { name: "list_files", description: "The files each node's downloads(out) offers (made from its current results only when downloaded), and whether they can be made now.",
+    inputSchema: { type: "object", properties: {} },
+    run: () => ({ nodes: offering.map((n) => ({ node: n, status: state.node[n].status, ready: filesReady(n), files: state.node[n].files || [],
+      error: state.node[n].files_error || undefined })), all_ready: current() }) },
+  { name: "read_file", description: "Make one file a node offers and return it: text as text (up to max_chars), other bytes as their size. save:true also downloads it.",
+    inputSchema: { type: "object", properties: { node: { type: "string", enum: offering }, name: { type: "string" }, max_chars: { type: "number" }, save: { type: "boolean" } }, required: ["node", "name"] },
+    run: async ({ node, name, max_chars = 20000, save = false }) => {
+      const f = (state.node[node].files || []).find((x) => x.name === name);
+      if (!f) throw new Error(`${node} offers no file ${name} (list_files)`);
+      if (!filesReady(node)) throw new Error(`${node} is ${state.node[node].status}: run it first`);
+      const bytes = await call("file", { node, name });
+      if (save) download(name, bytes, f.media);
+      const text = /^(text\/|application\/(json|geo\+json)|image\/svg)/.test(f.media) ? new TextDecoder().decode(bytes) : null;
+      return { node, name, media: f.media, bytes: bytes.length, text: text === null ? undefined : text.slice(0, max_chars), truncated: text !== null && text.length > max_chars };
+    } },
+  { name: "download_all", description: "Every file the nodes offer and run.json (the run they come from), as one zip download. Needs every node done and current.",
+    inputSchema: { type: "object", properties: {} },
+    run: () => downloadAll() },
   { name: "read_output", description: "A node's output as JSON (numpy arrays as lists, tables as {columns, rows}): this session's.",
     inputSchema: { type: "object", properties: { node: { type: "string", enum: order } }, required: ["node"] },
     run: async ({ node }) => ({ node, output: await readOutput(node) }) },
@@ -119,7 +137,7 @@ const tools = [
       if (save) download(`${run.name}.run.json`, JSON.stringify(run, null, 1), "application/json");
       return { name: run.name, run, missing: [] };
     } },
-  { name: "add_run", description: "Load a run file (the JSON from export_run, or a download from the Runs page) as a run named name, to compare with or view.",
+  { name: "add_run", description: "Load a run file (the JSON from export_run, or a download from the run log) as a run named name, to compare with or view.",
     inputSchema: { type: "object", properties: { name: { type: "string" }, run: { type: "object" } }, required: ["name", "run"] },
     run: async ({ name, run }) => { addRun(name, run); await compareRuns(); refresh(); return { previous_runs: loaded().map((r) => r.name), reference: reference() && reference().name }; } },
   { name: "remove_run", description: "Remove a run from the list.",
@@ -161,6 +179,9 @@ const tools = [
     inputSchema: { type: "object", properties: { shown: { type: "boolean" } }, required: ["shown"] },
     run: ({ shown }) => { setReportShown(shown); return { shown: state.reportShown }; } },
 ];
+// Runs are a block an app can leave out (ui: runs: false), and with them their tools.
+const RUN_TOOLS = ["list_runs", "apply_run", "view_run", "add_run", "remove_run", "set_reference"];
+if (!RUNS) tools.splice(0, tools.length, ...tools.filter((t) => !RUN_TOOLS.includes(t.name)));
 function registerWebMCP() {
   const mc = navigator.modelContext;
   const wrap = (t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema,

@@ -29,7 +29,7 @@ def test_a_run_reproduces_the_baseline(server, open_app, repo):
     page = open_app(url(server))
     r = tool(page, "run")
     assert r["ok"], r
-    assert r["computed"] == ["prepare", "baseline", "featurize", "train", "evaluate"]
+    assert r["computed"] == ["prepare", "baseline", "featurize", "train", "evaluate", "calibrated"]
     assert verified(page, repo, SENSOR) == "match"
     assert r["run"]["headline"][RMSE] == pytest.approx(0.35649534617614814, rel=1e-12)
     out = tool(page, "read_output", {"node": "baseline"})["output"]
@@ -40,16 +40,16 @@ def test_a_change_recomputes_only_what_it_reaches(server, open_app):
     page = open_app(url(server))
     assert tool(page, "run")["ok"]
     r = tool(page, "set_settings", {"values": {"train.alpha": 1}, "run": True})
-    assert r["ok"] and r["computed"] == ["train", "evaluate"]
+    assert r["ok"] and r["computed"] == ["train", "evaluate", "calibrated"]
     r = tool(page, "set_settings", {"values": {"featurize.degree": 5}, "run": True})
-    assert r["computed"] == ["featurize", "train", "evaluate"]
+    assert r["computed"] == ["featurize", "train", "evaluate", "calibrated"]
     # nothing changed: everything from the cache, and no run is logged
     r = tool(page, "run")
     assert r["computed"] == [] and r["run"] is None
     # all: every node again, and the same results
     before = page.evaluate("Object.fromEntries(Object.entries(window.blocksApp.state.node).map(([n, s]) => [n, s.digest]))")
     r = tool(page, "run", {"all": True})
-    assert len(r["computed"]) == 5
+    assert len(r["computed"]) == 6
     assert page.evaluate("Object.fromEntries(Object.entries(window.blocksApp.state.node).map(([n, s]) => [n, s.digest]))") == before
 
 
@@ -61,7 +61,7 @@ def test_a_change_waits_for_run(server, open_app):
     assert page.evaluate("window.blocksApp.state.node.prepare.status") == "stale"
     assert tool(page, "get_overview")["runs"] == 1                       # nothing ran by itself
     r = tool(page, "run")
-    assert r["computed"] == ["prepare", "baseline", "featurize", "train", "evaluate"] and tool(page, "get_overview")["runs"] == 2
+    assert r["computed"] == ["prepare", "baseline", "featurize", "train", "evaluate", "calibrated"] and tool(page, "get_overview")["runs"] == 2
     # every run is a run file, made by blocks.runs in the worker, and compared there with the reference
     assert r["run"]["settings"] == {"prepare.outlier_z": 4} and tool(page, "get_overview")["changes"] == [
         {"kind": "setting", "key": "prepare.outlier_z", "from": 3, "to": 4}]
@@ -103,7 +103,7 @@ def test_swapping_data(server, open_app, repo, tmp_path):
     assert page.evaluate("window.blocksApp.state.data.measurements.profile.rows") == 300
     assert page.evaluate("window.blocksApp.state.node.prepare.status") == "stale"
     r = tool(page, "run")
-    assert r["ok"] and r["computed"] == ["prepare", "baseline", "featurize", "train", "evaluate"]
+    assert r["ok"] and r["computed"] == ["prepare", "baseline", "featurize", "train", "evaluate", "calibrated"]
     assert verified(page, repo, SENSOR) == "differs"
     page.set_input_files(field, str(same))   # the same bytes under another name count as the original
     page.wait_for_function(wait)
