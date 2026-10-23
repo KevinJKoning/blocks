@@ -89,8 +89,14 @@ async function mountDataset(name, entries, info) {
   state.data[name] = { ...info, status: "loading" };
   refresh();
   try {
-    const res = await call("mount", { name, kind: d.kind, entries, targets: d.targets });
-    state.data[name] = { ...info, status: "mounted", size: res.size };
+    let res = await call("mount", { name, kind: d.kind, entries, targets: d.targets });
+    if (res.unreadable) {
+      // This browser's worker cannot read the files in place (WebKit on file://): send their bytes.
+      const bufs = await Promise.all(entries.map((e) => e.blob.arrayBuffer()));
+      res = await call("mount", { name, kind: d.kind, entries: entries.map((e, i) => ({ rel: e.rel, buf: bufs[i] })), targets: d.targets }, bufs);
+    }
+    state.data[name] = { ...info, status: "mounted", size: res.size, root: res.mounted,
+      ...(res.inMemory ? { inMemory: true } : {}) };
   } catch (e) {
     state.data[name] = { ...info, status: "error", note: e.message };
   }
@@ -195,7 +201,12 @@ async function ingestDataset(name, file, info) {
     await icall("init", { role: "ingest", runtimeBase: linked ? new URL(manifest.runtime.base, location.href).href : null, runtime,
       packages: [], env: manifest.env }, transfer);
     job.phase = "reading"; refresh();
-    await icall("ingestSource", { name, file, adapter: textOf(d.adapter.path), adapterPath: d.adapter.path });
+    const src = { name, adapter: textOf(d.adapter.path), adapterPath: d.adapter.path };
+    if ((await icall("ingestSource", { ...src, file })).unreadable) {
+      // The ingest worker cannot read the file in place (WebKit on file://): send its bytes.
+      const buf = await file.arrayBuffer();
+      await icall("ingestSource", { ...src, buf, file: { name: file.name } }, [buf]);
+    }
     const found = await icall("inspect", { options: d.options });
     Object.assign(job, { total: found.total, bytes: found.bytes, eta: estimateSeconds(d, found.bytes) });
     const key = cacheKey(name, found.fingerprint);
@@ -282,7 +293,7 @@ async function provideFile(name, file) {
   if (state.data[name].status !== "mounted") throw new Error(state.data[name].note);
   // Hash in the worker, reading the mounted file in chunks (never loaded whole).
   let original = false;
-  if (maybe) original = (await call("sha256", { path: `/_data/${name}/${entry.rel}` })) === d.files[0].sha256;
+  if (maybe) original = (await call("sha256", { path: `${state.data[name].root}/${entry.rel}` })) === d.files[0].sha256;
   state.data[name] = { ...state.data[name], original, note: original ? "identical to the recorded dataset (sha256)" : "differs from the recorded dataset: runs are modified" };
   dataChanged(name);
   refresh();

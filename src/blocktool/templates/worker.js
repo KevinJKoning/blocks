@@ -146,19 +146,47 @@ async function init(msg) {
   post({ type: "ready", python: version, timings: { python: (t1 - t0) / 1000, packages: (t2 - t1) / 1000, total: (performance.now() - t0) / 1000 } });
 }
 
-// A dataset is a WORKERFS mount at /_data/<name>; each app path that uses it is a symlink
-// into the mount.
+// Can this worker read a Blob synchronously, as WORKERFS does? WebKit refuses for a page
+// opened from file:// (an opaque origin): "Cannot load blob:null/…", then NotReadableError
+// inside Pyodide, which is fatal. So check first; the page then sends the bytes instead.
+function readable(blob) {
+  try { new FileReaderSync().readAsArrayBuffer(blob.slice(0, Math.min(1, blob.size))); return true; } catch { return false; }
+}
+function rmTree(p) {
+  if (!exists(p)) return;
+  if (py.FS.isDir(py.FS.lstat(p).mode)) {
+    for (const n of py.FS.readdir(p)) if (n !== "." && n !== "..") rmTree(`${p}/${n}`);
+    py.FS.rmdir(p);
+  } else py.FS.unlink(p);
+}
+// A dataset is a WORKERFS mount at /_data/<name> (or, from bytes, a copy at /_mem/<name>);
+// each app path that uses it is a symlink into it. entries: [{rel, blob}] read in place,
+// or [{rel, buf}] written into memory.
 function mount({ name, kind, entries, targets }) {
-  const at = `/_data/${name}`;
+  const at = `/_data/${name}`, mem = `/_mem/${name}`;
+  if (!entries.some((e) => e.buf) && !entries.every((e) => readable(e.blob))) return { unreadable: true };
   for (const t of targets) { const p = `${ROOT}/${t}`; if (exists(p)) py.FS.unlink(p); }
   if (exists(at)) { try { py.FS.unmount(at); } catch { /* not mounted */ } } else mkdirs(at);
-  py.FS.mount(py.FS.filesystems.WORKERFS, { blobs: entries.map((e) => ({ name: e.rel, data: e.blob })) }, at);
+  rmTree(mem);
+  let root = at, size = 0;
+  if (entries.some((e) => e.buf)) {
+    root = mem;
+    for (const e of entries) {
+      const full = `${mem}/${e.rel}`;
+      mkdirs(full.slice(0, full.lastIndexOf("/")));
+      py.FS.writeFile(full, new Uint8Array(e.buf));
+      size += e.buf.byteLength;
+    }
+  } else {
+    py.FS.mount(py.FS.filesystems.WORKERFS, { blobs: entries.map((e) => ({ name: e.rel, data: e.blob })) }, at);
+    size = entries.reduce((s, e) => s + e.blob.size, 0);
+  }
   for (const t of targets) {
     const p = `${ROOT}/${t}`;
     mkdirs(p.slice(0, p.lastIndexOf("/")) || ROOT);
-    py.FS.symlink(kind === "dir" ? at : `${at}/${entries[0].rel}`, p);
+    py.FS.symlink(kind === "dir" ? root : `${root}/${entries[0].rel}`, p);
   }
-  return { mounted: at, size: entries.reduce((s, e) => s + e.blob.size, 0) };
+  return { mounted: root, size, inMemory: root === mem };
 }
 
 function readText(path, limit = 4e6) {
@@ -248,12 +276,22 @@ def _convert(path, opts, sink, progress):
     return json.dumps(_ad["convert"](path, json.loads(opts), _Sink(sink), lambda d, t, p: progress(int(d), int(t or 0), str(p))))
 `;
 const ingest = { path: null };
-function ingestSource({ name, file, adapter, adapterPath }) {
-  const at = `/_src/${name}`;
-  if (exists(at)) { try { py.FS.unmount(at); } catch { /* not mounted */ } } else mkdirs(at);
-  const rel = file.name && /^[^/\\]+$/.test(file.name) ? file.name : "source";
-  py.FS.mount(py.FS.filesystems.WORKERFS, { blobs: [{ name: rel, data: file }] }, at);
-  ingest.path = `${at}/${rel}`;
+// file: the viewer's File, read in place; or buf: its bytes, when this worker cannot read it
+// (see readable), written into memory.
+function ingestSource({ name, file, buf, adapter, adapterPath }) {
+  const rel = file && file.name && /^[^/\\]+$/.test(file.name) ? file.name : "source";
+  if (buf) {
+    const mem = `/_mem_src/${name}`;
+    rmTree(mem); mkdirs(mem);
+    py.FS.writeFile(`${mem}/${rel}`, new Uint8Array(buf));
+    ingest.path = `${mem}/${rel}`;
+  } else {
+    if (!readable(file)) return { unreadable: true };
+    const at = `/_src/${name}`;
+    if (exists(at)) { try { py.FS.unmount(at); } catch { /* not mounted */ } } else mkdirs(at);
+    py.FS.mount(py.FS.filesystems.WORKERFS, { blobs: [{ name: rel, data: file }] }, at);
+    ingest.path = `${at}/${rel}`;
+  }
   py.globals.set("_ADAPTER_SRC", adapter);
   py.globals.set("_ADAPTER_PATH", adapterPath);
   py.runPython(INGEST_GLUE);
@@ -300,7 +338,10 @@ self.onmessage = async (ev) => {
     const result = await handlers[type](args);
     if (id !== undefined) post({ id, ok: true, result });
   } catch (err) {
-    post({ id, ok: false, error: String((err && err.stack) || err) });
-    if (type === "init") post({ type: "fatal", error: String((err && err.stack) || err) });
+    // WebKit's stack holds no message ("parse@[native code]"): always lead with it.
+    const msg = err && err.message !== undefined ? `${err.name || "Error"}: ${err.message}` : String(err);
+    const text = err && err.stack && !String(err.stack).includes(String(err.message)) ? `${msg}\n${err.stack}` : String((err && err.stack) || msg);
+    post({ id, ok: false, error: text });
+    if (type === "init") post({ type: "fatal", error: text });
   }
 };

@@ -32,7 +32,9 @@ documentation), and everything shown is a layer of blocks over their outputs.
   them and makes no network requests. Every component is hashed and checked at start-up;
   the app script is the only live script, pinned in the CSP.
 - **Data is read in place**: datasets are WORKERFS mounts, read by DuckDB and pyarrow
-  without copying; a dataset with a `format` is converted by an adapter first.
+  without copying; a dataset with a `format` is converted by an adapter first. Where the
+  worker cannot read a Blob synchronously (WebKit on a `file://` page), the page sends the
+  bytes and the dataset is a copy in the worker's memory instead.
 - **Verification is the tooling's, never the page's**: `blocks run` and `blocks build`
   compare each node's metrics (within tolerance) and output digest with the baseline. The
   baseline is current while `code_sha` is: the nodes' code without views, docstrings and
