@@ -1,0 +1,27 @@
+title: Parcel land use
+question: >-
+  How is a county's parcel layer divided between land uses, by area and by assessed value?
+description: >-
+  The parcels arrive the way GIS teams share them: an Esri file geodatabase folder zipped
+  on Windows. The app reads the Parcels feature class from the zip, converts it to
+  GeoParquet in the browser, drops slivers below a minimum area, and summarises area and
+  assessed value per land use.
+packages: [numpy, pyarrow, shapely]
+plugins: [gdb-zip]
+
+data:
+  parcels:
+    path: data/parcels.gdb.zip
+    at: data/parcels.parquet
+    format: gdb-zip
+    layer: Parcels
+    inline: false
+    desc: >-
+      Parcels.gdb zipped as Windows does (a Parcels.gdb/ folder, deflate, data
+      descriptors) with three feature classes: Parcels (2,000 polygons), Roads and Hydrants.
+      Synthetic, written with GDAL in Pyodide, in Web Mercator (EPSG:3857).
+
+docs: [README.md]
+verify: {rel_tol: 1.0e-9, abs_tol: 1.0e-9}
+# Previous runs every build ships (loaded with the data, compared after a run).
+runs: [baseline.run.json]

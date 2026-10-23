@@ -1,0 +1,10 @@
+.venv/
+.cache/
+__pycache__/
+*.egg-info/
+build/
+.pytest_cache/
+# exploration run logs (appended by every run on the dev server)
+projects/**/runs.jsonl
+.DS_Store
+dist/

@@ -1,0 +1,19 @@
+/* Base styles for view frames; the theme's tokens (proto/themes.css) come first. */
+:root { color-scheme: light dark; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--report); color: var(--text);
+  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow-wrap: anywhere;
+}
+#view { padding: 4px 0; }
+button, input, select { font: inherit; color: inherit; }
+button {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 6px; padding: 3px 10px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+input, select { background: var(--surface); border: 1px solid var(--line-2); border-radius: 6px; padding: 2px 6px; }
+table { border-collapse: collapse; }
+th, td { padding: 2px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+.muted { color: var(--muted); }
+svg text { fill: var(--muted); }

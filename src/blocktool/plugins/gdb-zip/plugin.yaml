@@ -1,0 +1,6 @@
+title: Zipped file geodatabase
+description: >-
+  Reads one feature class from an Esri file geodatabase zipped on Windows, converting it to
+  GeoParquet in the browser before any run (dataset `format: gdb-zip`, option `layer`).
+formats:
+  gdb-zip: gdb_zip.py

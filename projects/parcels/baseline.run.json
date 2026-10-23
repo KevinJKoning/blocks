@@ -1,0 +1,396 @@
+{
+ "format": "blocks-run/1",
+ "name": "parcels",
+ "app": "parcels",
+ "project": "parcels",
+ "title": "Parcel land use",
+ "made": "2026-10-23T01:34:07.577Z",
+ "code_sha": "6a514e4a4a8db8b2db3b747d3fa00cbbee25374a72111edbb2c2558baa624eb1",
+ "runtime": {
+  "pyodide": "314.0.7",
+  "python": "3.14.2",
+  "packages": {
+   "duckdb": "1.5.1",
+   "numpy": "2.4.6",
+   "pandas": "3.0.2",
+   "pyarrow": "22.0.0",
+   "pyodide-unix-timezones": "1.0.0",
+   "python-dateutil": "2.9.0.post0",
+   "pytz": "2026.1.post1",
+   "pyyaml": "6.0.3",
+   "shapely": "2.1.2",
+   "six": "1.17.0"
+  }
+ },
+ "settings": {
+  "areas.min_area_m2": 1000
+ },
+ "changed_settings": {},
+ "data": {
+  "parcels": {
+   "original": true,
+   "sha256": "d71aa4b412a0b7b95532593f23796d8eea9efff2267ee32df77a839f133dba17"
+  }
+ },
+ "nodes": {
+  "areas": {
+   "status": "done",
+   "seconds": 1.4086,
+   "metrics": {
+    "parcels": 2000,
+    "slivers_dropped": 0,
+    "crs": 3857
+   },
+   "digest": "8df50406a03cd54248820f8fc239edac5550da8ed8a83e909f0bacc9a9a141e9",
+   "blocks": [
+    {
+     "type": "metrics",
+     "title": "Metrics",
+     "id": "metrics",
+     "items": [
+      {
+       "key": "parcels",
+       "label": "parcels kept",
+       "goal": null,
+       "headline": false,
+       "value": 2000
+      },
+      {
+       "key": "slivers_dropped",
+       "label": "slivers dropped",
+       "goal": null,
+       "headline": false,
+       "value": 0
+      },
+      {
+       "key": "crs",
+       "label": "crs",
+       "value": 3857,
+       "undeclared": true
+      }
+     ]
+    },
+    {
+     "type": "markdown",
+     "text": "Areas in EPSG:3857 square metres; 0 slivers dropped.",
+     "id": "markdown-2"
+    },
+    {
+     "type": "chart",
+     "title": "Parcels by area",
+     "x": [
+      1434.44574830116,
+      1892.5550514005956,
+      2350.664354500031,
+      2808.773657599467,
+      3266.882960698902,
+      3724.9922637983377,
+      4183.101566897773,
+      4641.210869997209,
+      5099.320173096645,
+      5557.42947619608,
+      6015.538779295515,
+      6473.648082394951,
+      6931.757385494387,
+      7389.866688593822,
+      7847.975991693258,
+      8306.085294792694,
+      8764.194597892129,
+      9222.303900991565,
+      9680.413204091,
+      10138.522507190435
+     ],
+     "series": [
+      {
+       "name": "parcels",
+       "y": [
+        32,
+        108,
+        134,
+        200,
+        199,
+        216,
+        170,
+        164,
+        147,
+        121,
+        111,
+        85,
+        73,
+        66,
+        60,
+        51,
+        19,
+        26,
+        12,
+        6
+       ],
+       "kind": "line"
+      }
+     ],
+     "x_label": "area (m\u00b2)",
+     "id": "areas"
+    },
+    {
+     "type": "data",
+     "title": "Parcels kept",
+     "id": "kept",
+     "profile": {
+      "kind": "table",
+      "rows": 2000,
+      "columns": [
+       {
+        "name": "land_use",
+        "type": "string"
+       },
+       {
+        "name": "assessed",
+        "type": "double"
+       },
+       {
+        "name": "area_m2",
+        "type": "double"
+       }
+      ],
+      "head": [
+       [
+        "residential",
+        172512.83,
+        2469.65252617805
+       ],
+       [
+        "residential",
+        89806.85,
+        4322.363988616737
+       ],
+       [
+        "commercial",
+        483936,
+        3579.8462915719037
+       ],
+       [
+        "residential",
+        135780.07,
+        1853.8339731382089
+       ],
+       [
+        "commercial",
+        204398.92,
+        4813.767761351111
+       ],
+       [
+        "residential",
+        188445.42,
+        5991.521264208214
+       ],
+       [
+        "agricultural",
+        213410.21,
+        4640.078544851649
+       ],
+       [
+        "residential",
+        183691.22,
+        3632.345847862589
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "summary": {
+   "status": "done",
+   "seconds": 0.0033,
+   "metrics": {
+    "total_area_ha": 916.0770826574048,
+    "residential_area_share": 0.5160514163739623,
+    "value_per_ha": 419170.97097996715,
+    "by_land_use.agricultural.parcels": 299,
+    "by_land_use.agricultural.area_ha": 133.6546965999547,
+    "by_land_use.agricultural.value": 59180920.510000005,
+    "by_land_use.commercial.parcels": 308,
+    "by_land_use.commercial.area_ha": 141.0096905842908,
+    "by_land_use.commercial.value": 57152295.53,
+    "by_land_use.industrial.parcels": 201,
+    "by_land_use.industrial.area_ha": 93.89614465475924,
+    "by_land_use.industrial.value": 39610683.82,
+    "by_land_use.park.parcels": 160,
+    "by_land_use.park.area_ha": 74.77367480531892,
+    "by_land_use.park.value": 30885802.98,
+    "by_land_use.residential.parcels": 1032,
+    "by_land_use.residential.area_ha": 472.7428760130812,
+    "by_land_use.residential.value": 197163217.39
+   },
+   "digest": "7567a94c2652ca38a3f02eeb5150e6abf5ea794f32c51c29497baf9f2cff5cf6",
+   "blocks": [
+    {
+     "type": "metrics",
+     "title": "Metrics",
+     "id": "metrics",
+     "items": [
+      {
+       "key": "residential_area_share",
+       "label": "residential share",
+       "goal": "max",
+       "headline": true,
+       "value": 0.5160514163739623
+      },
+      {
+       "key": "total_area_ha",
+       "label": "total area (ha)",
+       "goal": "max",
+       "headline": true,
+       "value": 916.0770826574048
+      },
+      {
+       "key": "value_per_ha",
+       "label": "value per ha",
+       "goal": "max",
+       "headline": true,
+       "value": 419170.97097996715
+      },
+      {
+       "key": "by_land_use.agricultural.parcels",
+       "label": "by_land_use.agricultural.parcels",
+       "value": 299,
+       "undeclared": true
+      },
+      {
+       "key": "by_land_use.agricultural.area_ha",
+       "label": "by_land_use.agricultural.area_ha",
+       "value": 133.6546965999547,
+       "undeclared": true
+      },
+      {
+       "key": "by_land_use.agricultural.value",
+       "label": "by_land_use.agricultural.value",
+       "value": 59180920.510000005,
+       "undeclared": true
+      },
+      {
+       "key": "by_land_use.commercial.parcels",
+       "label": "by_land_use.commercial.parcels",
+       "value": 308,
+       "undeclared": true
+      },
+      {
+       "key": "by_land_use.commercial.area_ha",
+       "label": "by_land_use.commercial.area_ha",
+       "value": 141.0096905842908,
+       "undeclared": true
+      },
+      {
+       "key": "by_land_use.commercial.value",
+       "label": "by_land_use.commercial.value",
+       "value": 57152295.53,
+       "undeclared": true
+      },
+      {
+       "key": "by_land_use.industrial.parcels",
+       "label": "by_land_use.industrial.parcels",
+       "value": 201,
+       "undeclared": true
+      },
+      {
+       "key": "by_land_use.industrial.area_ha",
+       "label": "by_land_use.industrial.area_ha",
+       "value": 93.89614465475924,
+       "undeclared": true
+      },
+      {
+       "key": "by_land_use.industrial.value",
+       "label": "by_land_use.industrial.value",
+       "value": 39610683.82,
+       "undeclared": true
+      },
+      {
+       "key": "by_land_use.park.parcels",
+       "label": "by_land_use.park.parcels",
+       "value": 160,
+       "undeclared": true
+      },
+      {
+       "key": "by_land_use.park.area_ha",
+       "label": "by_land_use.park.area_ha",
+       "value": 74.77367480531892,
+       "undeclared": true
+      },
+      {
+       "key": "by_land_use.park.value",
+       "label": "by_land_use.park.value",
+       "value": 30885802.98,
+       "undeclared": true
+      },
+      {
+       "key": "by_land_use.residential.parcels",
+       "label": "by_land_use.residential.parcels",
+       "value": 1032,
+       "undeclared": true
+      },
+      {
+       "key": "by_land_use.residential.area_ha",
+       "label": "by_land_use.residential.area_ha",
+       "value": 472.7428760130812,
+       "undeclared": true
+      },
+      {
+       "key": "by_land_use.residential.value",
+       "label": "by_land_use.residential.value",
+       "value": 197163217.39,
+       "undeclared": true
+      }
+     ]
+    },
+    {
+     "type": "table",
+     "title": "By land use",
+     "columns": [
+      "land use",
+      "parcels",
+      "area (ha)",
+      "assessed value"
+     ],
+     "rows": [
+      [
+       "residential",
+       1032,
+       472.74,
+       197163217
+      ],
+      [
+       "commercial",
+       308,
+       141.01,
+       57152296
+      ],
+      [
+       "agricultural",
+       299,
+       133.65,
+       59180921
+      ],
+      [
+       "industrial",
+       201,
+       93.9,
+       39610684
+      ],
+      [
+       "park",
+       160,
+       74.77,
+       30885803
+      ]
+     ],
+     "total": 5,
+     "id": "by-use"
+    }
+   ]
+  }
+ },
+ "headline": {
+  "summary:residential_area_share": 0.5160514163739623,
+  "summary:total_area_ha": 916.0770826574048,
+  "summary:value_per_ha": 419170.97097996715
+ }
+}

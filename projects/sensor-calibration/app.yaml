@@ -1,0 +1,33 @@
+title: Sensor calibration
+question: >-
+  Which calibration curve best maps a low-cost sensor's raw reading to the reference
+  instrument on held-out data, without extrapolating badly?
+description: >-
+  Standardized polynomial features of the reading (cubic by default) fitted with
+  closed-form ridge regression.
+packages: [numpy]
+plugins: [calibration-views]
+
+data:
+  measurements:
+    path: data/measurements.parquet
+    desc: 400 paired readings (reading, reference) from the calibration rig.
+
+groups:
+  Data preparation:
+    doc: >-
+      Turns the rig's raw readings into model inputs: missing rows and connector spikes
+      are dropped, the rest split into train and test, and the reading expanded into
+      standardized polynomial features.
+  Modelling:
+    doc: >-
+      Fits the calibration curve on the training rows and scores it on held-out rows
+      against a straight-line baseline.
+
+# Blocks of nodes' views placed on the overview's Results too.
+overview:
+  - {node: evaluate, block: curve}
+docs: [README.md]
+
+# Previous runs every build ships (loaded with the data, compared after a run).
+runs: [baseline.run.json]

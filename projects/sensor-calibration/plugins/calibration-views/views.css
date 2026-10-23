@@ -1,0 +1,8 @@
+.chart { max-width: 640px; display: block; }
+.chart .axis { stroke: var(--line-2); }
+.chart .ref { stroke: var(--line-2); stroke-dasharray: 3 3; }
+.chart .dot { fill: var(--s1); fill-opacity: .7; }
+.chart .dot.over { fill: var(--err); fill-opacity: 1; }
+.chart .line { fill: none; stroke: var(--s2); stroke-width: 2; }
+label { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
+.chart .line.base { stroke: var(--faint); stroke-dasharray: 4 3; }

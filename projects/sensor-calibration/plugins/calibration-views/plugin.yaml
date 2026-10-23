@@ -1,0 +1,17 @@
+title: Calibration views
+description: The measurements before any run (queried with DuckDB), and a residual explorer with a threshold to drag.
+views:
+  preview:
+    at: node:prepare
+    tab: documentation
+    title: The measurements
+    code: [plot.js, preview.js]
+    css: [views.css]
+    reads: [measurements]
+    can: [query]
+  residuals:
+    at: node:evaluate
+    title: Residual explorer
+    code: [plot.js, residuals.js]
+    css: [views.css]
+    reads: [evaluate]
