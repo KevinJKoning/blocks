@@ -33,7 +33,7 @@ from blocks import runs as table_runs, schema as table_schema
 BASELINE = "baseline.run.json"
 RUN_SUFFIX = ".run.json"
 RUN_FORMAT = table_runs.FORMAT
-BOOKKEEPING = {"app.yaml", "runs.jsonl"}
+BOOKKEEPING = {"app.yaml", "runs.jsonl"}   # runs.jsonl: where the run log was kept before it moved to build/
 RESERVED_DIRS = ("plugins", "superseded", "data")
 DEFAULT_TOL = {"rel_tol": 1e-9, "abs_tol": 1e-12}
 APP_KEYS = {"title", "question", "description", "data", "groups", "plugins", "packages", "overview",

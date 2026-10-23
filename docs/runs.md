@@ -55,7 +55,7 @@ each dataset by key).
 
 - **One list.** `state.runs` holds every run file the page knows, each with where it comes
   from: this session (every run that computed something and completed), the dev server's
-  run log (`runs.jsonl`, linked builds), the app (`app.yaml runs:`: its own
+  run log (`build/<project>/runs.jsonl`, linked builds), the app (`app.yaml runs:`: its own
   `baseline.run.json` → "baseline", a superseded version's
   `superseded/older/baseline.run.json` → "older/baseline"), and files loaded in the run
   log. Runs of another project are refused.

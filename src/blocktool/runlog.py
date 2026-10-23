@@ -1,14 +1,15 @@
-"""An app's exploration run log: runs.jsonl in the app's directory, one JSON run per line."""
+"""An app's exploration run log: runs.jsonl, one JSON run per line, kept by the dev server
+under build/ next to the app's linked page: local working state, never part of the project."""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from .spec import app_dir
+from .build import output_path
 
 
 def runs_path(repo: Path, project: str, version: str | None = None) -> Path:
-    return app_dir(repo, project, version) / "runs.jsonl"
+    return output_path(repo, project, version).parent / "runs.jsonl"
 
 
 def read_runs(path: Path) -> list[dict]:

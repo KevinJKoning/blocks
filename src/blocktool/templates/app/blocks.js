@@ -136,7 +136,7 @@ const RUN_FROM = { session: "this session", log: "an earlier session", app: "shi
 function runsTable() {
   const files = h("input", { type: "file", hidden: true, multiple: true, accept: ".json", "aria-label": "Run files",
     onchange: async (e) => { try { await addRunFiles([...e.target.files]); } catch (err) { note.textContent = `Not loaded: ${err.message}`; note.className = "small hint warn"; } } });
-  const note = h("p", { class: "small muted" }, "Every run that computes something is kept here", linked ? " and in runs.jsonl on the dev server" : "",
+  const note = h("p", { class: "small muted" }, "Every run that computes something is kept here", linked ? " and in the dev server's run log" : "",
     ". Make one active to show it as it was (its settings, results and metrics); select others to compare them with it. ",
     "Load run files (*.run.json) of this app or another version of it to compare with.");
   const controls = h("div", { class: "runs-controls" }, files,

@@ -82,9 +82,10 @@ def test_runs_api(server, repo, older):
     assert post(b'{"id": "r2"}')[0] == 400                        # the run log holds run files only
     status, _, body = fetch(server + RUNS)
     assert [r["name"] for r in json.loads(body)["runs"]] == ["r1"]
-    assert (spec.app_dir(repo, SENSOR) / "runs.jsonl").is_file()
+    assert (repo / "build" / SENSOR / "runs.jsonl").is_file()               # local state, out of the project
+    assert not (spec.app_dir(repo, SENSOR) / "runs.jsonl").exists()
     assert post(run("r3"), path=f"{RUNS}--older")[0] == 200
-    assert (spec.app_dir(repo, SENSOR, "older") / "runs.jsonl").is_file()
+    assert (repo / "build" / SENSOR / "superseded" / "older" / "runs.jsonl").is_file()
     assert post(run("r4"), path="/_api/runs/nope")[0] == 404
 
 

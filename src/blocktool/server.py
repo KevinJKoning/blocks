@@ -8,7 +8,7 @@ Routes (127.0.0.1 only):
   /_runtime/pele/<ver>/pele.global.js   browser caches them once for every app build)
   /_data/<app>/<dataset>/<rel>        an app's datasets, read in place (ETag, revalidated);
                                       <app> is the project, or <project>--<name> for a superseded one
-  /_api/runs/<app>                    GET the run log, POST one run file (appends runs.jsonl)
+  /_api/runs/<app>                    GET the run log, POST one run file (appends build/<app>/runs.jsonl)
 
 Each app page is a single HTML file holding the app's code, params, plugins and shipped
 runs; only the heavy, shared parts (runtime, pele, data) come from here.
@@ -45,6 +45,10 @@ def app_of(name: str) -> tuple[str, str | None]:
     """`project` or `project--version` (as in /_data/ and /_api/ URLs)."""
     project, _, version = name.partition("--")
     return project, version or None
+
+
+def known_app(repo: Path, project: str, version: str | None) -> bool:
+    return project in spec.projects(repo) and (not version or version in spec.superseded(repo, project))
 
 
 def index(repo: Path) -> bytes:
@@ -152,9 +156,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(HTTPStatus.BAD_REQUEST, "not JSON")
         if not isinstance(run, dict) or run.get("format") != runs.FORMAT or not isinstance(run.get("name"), str):
             return self._error(HTTPStatus.BAD_REQUEST, f"want a {runs.FORMAT} run file")
-        dest = runs_path(self.repo, *app_of(parts[2]))
-        if not dest.parent.is_dir():
+        if not known_app(self.repo, *app_of(parts[2])):
             return self._error(HTTPStatus.NOT_FOUND, "no such app")
+        dest = runs_path(self.repo, *app_of(parts[2]))
+        dest.parent.mkdir(parents=True, exist_ok=True)
         with self._append, dest.open("a") as f:
             f.write(json.dumps(run, separators=(",", ":")) + "\n")
         return self._json({"ok": True, "name": run["name"]})
@@ -172,7 +177,7 @@ class Handler(BaseHTTPRequestHandler):
         return None
 
     def _app(self, project: str, version: str | None):
-        if project not in spec.projects(self.repo) or (version and version not in spec.superseded(self.repo, project)):
+        if not known_app(self.repo, project, version):
             return self._error(HTTPStatus.NOT_FOUND, f"no app {project}{'/' + version if version else ''}")
         page, _ = build.build(self.repo, project, version, inline=False, runtime=self.runtime)
         dest = build.output_path(self.repo, project, version)
@@ -199,7 +204,7 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) < 3 or not _safe(parts[0], parts[1]):
             return self._error(HTTPStatus.NOT_FOUND, "want /_data/<app>/<dataset>/<file>")
         project, version = app_of(parts[0])
-        if project not in spec.projects(self.repo) or (version and version not in spec.superseded(self.repo, project)):
+        if not known_app(self.repo, project, version):
             return self._error(HTTPStatus.NOT_FOUND, f"no app {parts[0]}")
         d = spec.load_app(self.repo, project, version)["datasets"].get(parts[1])
         rel = "/".join(parts[2:])

@@ -34,7 +34,7 @@ function addRun(name, doc, from = "file") {
   if (doc.project !== manifest.project) throw new Error(`${name}: a run of the project ${doc.project}, not ${manifest.project}`);
   state.runs = state.runs.filter((r) => r.name !== name).concat([{ name, doc: { ...doc, name }, from }]);
 }
-// A run of this session: kept in the list (and in the dev server's run log, runs.jsonl).
+// A run of this session: kept in the list (and in the dev server's run log, build/<app>/runs.jsonl).
 async function keepRun(doc) {
   const name = freeName(doc.name);
   const run = { name, doc: { ...doc, name }, from: "session" };

@@ -4,7 +4,7 @@ __pycache__/
 *.egg-info/
 build/
 .pytest_cache/
-# exploration run logs (appended by every run on the dev server)
+# exploration run logs from before they moved to build/<project>/runs.jsonl
 projects/**/runs.jsonl
 .DS_Store
 dist/

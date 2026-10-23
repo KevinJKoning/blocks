@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from blocktool import cli, harvest, spec
+from blocktool import cli, harvest, runlog, spec
 from conftest import SENSOR, tool, verified
 
 pytestmark = pytest.mark.browser
@@ -78,7 +78,7 @@ def test_explore_settings_and_log_runs(server, open_app, repo):
     assert best["name"] == runs["best"][RMSE] and best["headline"][RMSE] == min(sw["best"][RMSE]["value"], best["headline"][RMSE])
     activated = tool(page, "activate_run", {"name": best["name"], "run": True})
     assert activated["ok"] and activated["run"]["headline"][RMSE] == best["headline"][RMSE]   # the same run again
-    logged = [json.loads(l) for l in (spec.app_dir(repo, SENSOR) / "runs.jsonl").read_text().splitlines()]
+    logged = [json.loads(l) for l in runlog.runs_path(repo, SENSOR).read_text().splitlines()]
     assert logged and all(r["format"] == spec.RUN_FORMAT and r["complete"] for r in logged)   # the run log holds run files
     q = tool(page, "query_data", {"sql": "SELECT count(*) AS n FROM 'data/measurements.parquet'"})
     assert q["rows"] == [[400]]

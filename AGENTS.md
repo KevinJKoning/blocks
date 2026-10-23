@@ -62,5 +62,5 @@ dataset format, or an interactive view (a control to drag, a map). A view uses
 - Datasets live in `projects/<project>/data/`; prefer Parquet (`blocks convert`). Large
   files: `inline: false` (the viewer provides them, checked by sha256).
 - Packages must have a Pyodide build (`runtime.lock.json` pins the version).
-- Do not commit `runs.jsonl`, `build/` or `dist/`.
+- Do not commit `build/` (the linked pages and the dev server's run logs, `runs.jsonl`) or `dist/`.
 - Tests: `.venv/bin/python -m pytest tests` (`-m "not browser"` for the fast ones).
