@@ -3,9 +3,11 @@ and every node's output is cached by a key over its code, its settings and its i
 
 Changing a setting re-runs the node that reads it and what depends on it, nothing else; a
 view re-renders from the cached output without re-running anything. A node's result for
-the page is its status, seconds, metrics, a digest of its output (what verification
-compares, byte for byte), its blocks (its view's, or default ones) and the files its
-downloads(out) offers (their names; the bytes are made only when asked for).
+the page is its status, seconds, its key, metrics, a digest of its output (what verification
+compares, byte for byte), the output itself when it is small (a run file keeps it, so that
+views can read a run that is no longer in the cache), its blocks (its view's, or default
+ones) and the files its downloads(out) offers (their names; the bytes are made only when
+asked for).
 """
 from __future__ import annotations
 
@@ -25,6 +27,8 @@ from . import ui
 
 VERSION = "1"   # part of every cache key: a new executor recomputes everything
 FILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,120}")
+OUTPUT_BYTES = 256 * 1024   # an output up to this size (as JSON) is kept in the run file; larger ones only by digest
+OUTPUT_CELLS = 50_000       # a cheap bound checked first, so that large tables are never converted
 
 
 def dig(obj, key):
@@ -102,6 +106,38 @@ def to_json(v, max_rows=100_000):
     if isinstance(v, (list, tuple)):
         return [to_json(x, max_rows) for x in v]
     return ui.plain(v)
+
+
+def cells(v, limit=OUTPUT_CELLS) -> int:
+    """About how many values an output holds, counting no further than `limit`."""
+    if hasattr(v, "num_rows") and hasattr(v, "num_columns"):                     # pyarrow
+        return v.num_rows * max(v.num_columns, 1)
+    if hasattr(v, "columns") and hasattr(v, "shape") and len(getattr(v, "shape", ())) == 2:   # pandas
+        return v.shape[0] * max(v.shape[1], 1)
+    if hasattr(v, "size") and hasattr(v, "shape"):                                # numpy
+        return int(v.size)
+    if hasattr(v, "__dataclass_fields__"):
+        v = {f: getattr(v, f) for f in v.__dataclass_fields__}
+    if isinstance(v, (dict, list, tuple)):
+        n = 0
+        for x in (v.values() if isinstance(v, dict) else v):
+            n += 1 + cells(x, limit - n)
+            if n > limit:
+                break
+        return n
+    return len(v) // 64 if isinstance(v, (str, bytes)) else 1
+
+
+def small_output(v):
+    """The output as JSON-able data when it is small enough to keep in a run file, else None."""
+    if cells(v) > OUTPUT_CELLS:
+        return None
+    try:
+        out = to_json(v)
+        size = len(json.dumps(out, default=str))
+    except Exception:  # noqa: BLE001 - an output that is not data is kept by digest only
+        return None
+    return out if size <= OUTPUT_BYTES else None
 
 
 def describe(value, root) -> dict:
@@ -200,7 +236,7 @@ class Graph:
             keys[name] = key
             hit = self.cache.get(name)
             if hit and hit[0] == key and name in self.results and not (only and name in only):
-                results[name] = {**self.results[name], "cached": True}
+                results[name] = {**self.results[name], "cached": True, "key": key}
                 continue
             args = [os.path.join(self.root, self.spec["datasets"][d["name"]]["at"]) if d["kind"] == "dataset" else self.cache[d["name"]][1]
                     for d in node["deps"]]
@@ -217,14 +253,14 @@ class Graph:
                 self.cache.pop(name, None)
                 self.results.pop(name, None)
                 self.files.pop(name, None)
-                results[name] = {"status": "error", "error": traceback.format_exc(), "seconds": round(time.perf_counter() - t0, 4),
+                results[name] = {"status": "error", "key": key, "error": traceback.format_exc(), "seconds": round(time.perf_counter() - t0, 4),
                                  "log": out.getvalue()[-20000:] + err.getvalue()[-20000:]}
                 continue
             finally:
                 os.chdir(old)
             self.cache[name] = (key, value)
-            results[name] = self.results[name] = self.result(name, value, round(time.perf_counter() - t0, 4), mine, False,
-                                                              out.getvalue()[-20000:] + err.getvalue()[-20000:])
+            results[name] = self.results[name] = {**self.result(name, value, round(time.perf_counter() - t0, 4), mine, False,
+                                                                 out.getvalue()[-20000:] + err.getvalue()[-20000:]), "key": key}
         return results
 
     def rerender(self, name) -> list:
@@ -243,7 +279,7 @@ class Graph:
                 metrics[m["key"]] = ui.plain(v)
         files, files_error = self.offer(name, value)
         return {"status": "done", "seconds": seconds, "cached": cached, "settings": settings, "metrics": metrics,
-                "digest": digest(value), "blocks": self.blocks(name, value), "files": files, "log": log,
+                "digest": digest(value), "output": small_output(value), "blocks": self.blocks(name, value), "files": files, "log": log,
                 **({"files_error": files_error} if files_error else {})}
 
     def offer(self, name, value):
@@ -302,10 +338,13 @@ class Graph:
                     raw.append(ui.data(value, title="Output"))
         except Exception:  # noqa: BLE001 - the node ran; only its view failed
             return [ui.markdown("The view failed:\n\n```\n" + traceback.format_exc() + "```", id="view-error")]
-        out, taken = [], set()
-        for i, b in enumerate(raw):
+        # A block without an id is named by its type and its place among the blocks of that
+        # type (chart-1, chart-2): adding a block of another type never renames it.
+        out, taken, seen = [], set(), {}
+        for b in raw:
             b = dict(b)
-            b["id"] = str(b.get("id") or f"{b['type']}-{i + 1}")
+            seen[b["type"]] = seen.get(b["type"], 0) + 1
+            b["id"] = str(b.get("id") or f"{b['type']}-{seen[b['type']]}")
             if b["id"] in taken:
                 return [ui.markdown(f"The view made two blocks with id {b['id']!r}; give one an id.", id="view-error")]
             taken.add(b["id"])

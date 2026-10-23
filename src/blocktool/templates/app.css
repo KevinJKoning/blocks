@@ -121,6 +121,7 @@ svg.dag { overflow: visible; font-variant-numeric: tabular-nums; }
 .dag .node:focus-visible > rect { stroke: var(--accent); stroke-width: 2; }
 /* status: border + light tint + coloured status line (with a glyph, so not colour alone) */
 .dag .node[data-status="done"] { --st: var(--ok); }
+.dag .node[data-status="kept"] { --st: var(--accent); }
 .dag .node[data-status="pending"] { --st: var(--muted); }
 .dag .node[data-status="pending"] > rect { stroke-dasharray: 3 3; }
 .dag .node[data-status="stale"] { --st: var(--warn); }
@@ -147,6 +148,7 @@ svg.dag { overflow: visible; font-variant-numeric: tabular-nums; }
 .report .lede { color: var(--muted); }
 .pill { display: inline-block; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); vertical-align: middle; margin-left: 8px; }
 .pill.done { background: var(--ok-soft); color: var(--ok); }
+.pill.kept { background: var(--accent-soft); color: var(--accent); }
 .pill.error { background: var(--err-soft); color: var(--err); }
 .pill.stale { background: var(--warn-soft); color: var(--warn); }
 .pill.running { background: var(--run-soft); color: var(--run); }
@@ -300,7 +302,7 @@ ul.plugins li { padding: 6px 0; border-bottom: 1px solid var(--line); }
 .chart .grid line { stroke: var(--line); }
 .chart text { fill: var(--muted); font-size: 11px; font-family: var(--sans); }
 .chart .zero { stroke: var(--faint); stroke-dasharray: 3 3; }
-.chart .base { stroke-dasharray: 4 3; stroke-opacity: .8; }
+.chart .base { stroke-opacity: .8; }   /* each run its own dash (blocks.js DASHES) */
 .chart-legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
 .chart-legend span::before { content: ""; display: inline-block; width: 10px; height: 3px; margin-right: 6px; vertical-align: middle; background: var(--c); }
 .chart-legend span.base::before { background: repeating-linear-gradient(90deg, var(--c) 0 4px, transparent 4px 7px); }
@@ -309,22 +311,22 @@ ul.plugins li { padding: 6px 0; border-bottom: 1px solid var(--line); }
 .schema-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
 .schema-head .pill { margin-left: 0; }
 table.schema-fields tr.bad td:first-child .mono { color: var(--err); }
-/* this run next to a previous one */
-.compare { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 10px 0 4px; }
-.compare .btn.on { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+/* the active run next to the runs selected in the run log (the comparison block) */
+.compare-changes { margin: 4px 0 8px; padding-left: 18px; }
+.block-comparison h4 { margin: 14px 0 4px; font-size: 13px; }
 .delta.changed { color: var(--accent); } .delta.same { color: var(--faint); }
 .delta.better { color: var(--ok); } .delta.worse { color: var(--err); }
-table.runs tr.reference td { font-weight: 600; }
+table.runs tr.active td { font-weight: 600; }
 
-/* the header's Runs (with the reference), the runs page, viewing another run */
+/* the header's Run log, the run log, the run the page shows */
 .cap.runs-btn { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cap.runs-btn.on { border-color: var(--accent); }
 table.runs td.run-cell { min-width: 150px; }
 table.runs .run-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
 table.runs .actions .btn.link { margin-right: 8px; font-size: 12px; }
-table.runs tr.viewed td { background: var(--accent-soft, transparent); }
+table.runs tr.active td { background: var(--accent-soft, transparent); }
 .runs-controls { display: flex; gap: 8px; margin: 12px 0 0; }
-.viewing { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+.active-run { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
   margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--accent); border-radius: 8px; font-size: 13px; }
 
 /* settings shown live on a node's page */

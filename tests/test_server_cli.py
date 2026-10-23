@@ -74,7 +74,7 @@ def test_many_concurrent_requests_are_all_served(server):
 
 def test_runs_api(server, repo, older):
     post = lambda body, ctype="application/json", path=RUNS: fetch(server + path, data=body, headers={"Content-Type": ctype})
-    run = lambda name: json.dumps({"format": "blocks-run/1", "name": name, "headline": {"x": 1}}).encode()
+    run = lambda name: json.dumps({"format": spec.RUN_FORMAT, "name": name, "headline": {"x": 1}}).encode()
     assert post(run("r1"))[0] == 200
     assert post(b"name=r2", "application/x-www-form-urlencoded")[0] == 415
     assert post(b"[1]")[0] == 400
@@ -113,7 +113,7 @@ def test_supersede_keeps_a_copy_that_still_runs_on_the_project_data(repo, monkey
     cur = spec.load_app(repo, SENSOR)
     assert old["code_sha"] == cur["code_sha"] and old["baseline"]["code_sha"] == old["code_sha"]
     assert set(old["files"]) == set(cur["files"]) and set(old["views"]) == set(cur["views"])
-    assert old["runs"] == {"baseline": cur["baseline"]}          # it ships its own runs, not the superseded ones
+    assert old["runs"] == {"baseline": {**cur["baseline"], "app": f"{SENSOR}/cubic"}}   # its own runs, now of the superseded app
     assert not (old["dir"] / "data").exists() and not (old["dir"] / "superseded").exists()
     assert "cubic" in spec.load_app(repo, SENSOR)["superseded"]
     assert blocks("supersede", SENSOR, "cubic") != 0

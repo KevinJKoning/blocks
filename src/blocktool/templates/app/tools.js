@@ -3,31 +3,23 @@
 // and blocks, and compares runs, through these.
 
 // ------------------------------------------------------------------ agent interface (WebMCP + window.blocksApp)
+// A node in the active run: its state (runs.js shownStatus), settings, metrics, digest, blocks,
+// whether its code differs from the app's now, and its comparison with each selected run.
 const snapshot = (n) => {
-  const s = state.node[n], node = nodes[n], ref = refNode(n);
-  return { name: n, group: groupOf[n] || null, doc: node.doc, file: node.file, inputs: node.deps, status: s.status, cached: !!s.cached,
-    seconds: s.seconds, settings: Object.fromEntries(nodeSettings(n).map((k) => [k, state.settings[k]])),
+  const s = state.node[n], node = nodes[n], r = shownNode(n) || {}, a = activeRun();
+  return { name: n, group: groupOf[n] || null, doc: node.doc, file: node.file, inputs: node.deps, status: shownStatus(n), cached: !!s.cached && live(n),
+    seconds: r.seconds, settings: Object.fromEntries(nodeSettings(n).map((k) => [k, state.settings[k]])),
     declared_metrics: declaredFor(n).map(({ key, label, goal, headline: hl }) => ({ key, label, goal, headline: hl })),
-    metrics: s.metrics || {}, digest: s.digest || null, data: nodeData(n).map((d) => ({ name: d.name, profile: (state.data[d.name] || {}).profile || null })),
-    error: s.status === "error" ? s.error : undefined, showing: shownSide(n),
-    blocks: ((shownRecord(n) || {}).blocks || []).map((b) => ({ type: b.type, id: b.id, title: b.title })),
-    reference: ref ? reference().name : null, reference_metrics: ref ? ref.metrics : null, compare: comparable(n),
-    comparison: state.cmp && state.cmp.nodes[n] ? { verdict: state.cmp.nodes[n].verdict, metrics: state.cmp.nodes[n].metrics } : null,
-    log: (s.log || "").slice(-4000) };
+    metrics: r.metrics || {}, digest: r.digest || null, data: nodeData(n).map((d) => ({ name: d.name, profile: (state.data[d.name] || {}).profile || null })),
+    error: ["error", "blocked"].includes(r.status) ? r.error : undefined, active: a ? a.name : null, other_code: otherCode(n),
+    blocks: (r.blocks || []).map((b) => ({ type: b.type, id: b.id, title: b.title })), output_readable: readable(n),
+    comparison: comparisons().map(({ run, cmp }) => ({ run: run.name, verdict: (cmp.nodes[n] || {}).verdict, metrics: (cmp.nodes[n] || {}).metrics || {},
+      changes: changesFor(cmp.changes, n) })),
+    log: held(n) ? (s.log || "").slice(-4000) : "" };
 };
 // A run in a few fields: its name, source, the settings it changed from the defaults, its data, headline, what it computed.
 const summary = (r) => r && { name: r.name, source: r.doc.source, settings: r.doc.changed_settings, data: r.doc.data,
-  headline: r.doc.headline, ran: r.doc.ran, seconds: r.doc.seconds, made: r.doc.made };
-async function applyRun(name, run) {
-  const r = runByName(name);
-  if (!r) throw new Error(`no run ${name}`);
-  const known = Object.fromEntries(Object.entries(r.doc.settings || {}).filter(([k]) => k in settingSpec));
-  const warnings = await setSettings({ ...defaults, ...known });
-  refresh();
-  const out = { applied: r.name, settings: r.doc.changed_settings, warnings };
-  if (run) { const res = await runGraph("agent"); out.ok = res.ok; out.failed = res.failed; out.run = summary(res.run); }
-  return out;
-}
+  headline: r.doc.headline, ran: r.doc.ran, seconds: r.doc.seconds, made: r.doc.made, code_sha: r.doc.code_sha };
 async function sweep({ grid, max_runs = 50, restore = true, source = "sweep" }) {
   const keys = Object.keys(grid || {});
   if (!keys.length) throw new Error("grid must map setting names (node.param) to lists of values");
@@ -45,29 +37,29 @@ async function sweep({ grid, max_runs = 50, restore = true, source = "sweep" }) 
       const res = await runGraph(source);
       const doc = res.run ? res.run.doc : state.current;   // a combination already run comes from the cache
       if (doc) docs.push({ ...doc, name: `sweep-${docs.length}` });
-      results.push({ settings: combo, ok: res.ok, failed: res.failed, warnings, run: res.run ? summary(res.run) : { headline: headlineNow() } });
+      results.push({ settings: combo, ok: res.ok, failed: res.failed, warnings, run: res.run ? summary(res.run) : { headline: (state.current || {}).headline || {} } });
     }
     if (restore) { await setSettings(start); await runGraph(source); }
   } finally { refresh(); }
-  const ranked = await call("summarize", { runs: docs, ref: null });   // the best, by each metric's goal (blocks.runs)
+  const ranked = await call("summarize", { runs: docs.map((doc) => brief({ name: doc.name, doc })), ref: null });   // the best, by each metric's goal (blocks.runs)
   const best = Object.fromEntries(Object.entries(ranked.best).map(([id, name]) => { const i = Number(name.slice(6));
     return [id, { value: docs[i].headline[id], settings: results[i].settings }]; }));
   return { runs: results, best, restored: restore };
 }
 const SEL = { type: "object", properties: { node: { type: "string", enum: order }, group: { type: "string", enum: groupNames }, runs: { type: "boolean" } } };
 const tools = [
-  { name: "get_overview", description: "The app's question and description, its headline metrics (with goals) for this run and the reference run, nodes with their inputs and status, groups, settings with ranges, datasets with what they hold, previous runs loaded, run count.",
+  { name: "get_overview", description: "The app's question and description, the active run (the one the page shows) and its headline metrics (with goals) against each run compared with it, nodes with their inputs and status, groups, settings with ranges, datasets with what they hold, previous runs loaded, run count.",
     inputSchema: { type: "object", properties: {} },
-    run: () => { const r = reference();
+    run: () => { const a = activeRun(), cs = comparisons(), now = (activeDoc() || {}).headline || {};
       return { project: manifest.project, app: manifest.id, title: manifest.title, question: manifest.question, description: manifest.description, mode: manifest.mode,
-        ready: state.ready && dataReady(), at_defaults: atDefaults(),
-        headline: headline.map((m) => ({ ...m, now: headlineNow()[m.id], reference: r ? (r.doc.headline || {})[m.id] : undefined,
-          delta: (headlineCell(m.id) || {}).delta, better: (headlineCell(m.id) || {}).better })),
-        nodes: order.map((n) => ({ name: n, group: groupOf[n] || null, description: nodes[n].desc, inputs: nodes[n].deps.map((d) => d.name), status: state.node[n].status })),
+        ready: state.ready && dataReady(), at_defaults: atDefaults(), active: a ? a.name : null, compare: comparedRuns().map((r) => r.name),
+        headline: headline.map((m) => ({ ...m, now: now[m.id],
+          compared: Object.fromEntries(cs.map(({ run, cmp }) => { const c = cmp.headline[m.id] || {}; return [run.name, { value: c.ref, delta: c.delta, better: c.better }]; })) })),
+        nodes: order.map((n) => ({ name: n, group: groupOf[n] || null, description: nodes[n].desc, inputs: nodes[n].deps.map((d) => d.name), status: shownStatus(n) })),
         groups: Object.fromEntries(groupNames.map((g) => [g, groups[g].nodes])), edges: graph.edges,
         settings: Object.fromEntries(Object.entries(settingSpec).map(([k, v]) => [k, { ...v, value: state.settings[k] }])),
         datasets: manifest.datasets.map((d) => ({ name: d.name, kind: d.kind, desc: d.desc, size: d.size, at: d.at, state: state.data[d.name] })),
-        reference: r && r.name, changes: state.cmp ? state.cmp.changes : [],
+        changes: Object.fromEntries(cs.map(({ run, cmp }) => [run.name, cmp.changes])),
         previous_runs: loaded().map((x) => ({ name: x.name, app: x.doc.app, made: x.doc.made, from: x.from, headline: x.doc.headline })),
         plugins: (manifest.plugins || []).map((p) => p.name), runs: state.runs.filter((x) => x.from === "session").length, runtime: manifest.runtime,
         superseded: (manifest.superseded || []).map((s) => s.name),
@@ -75,9 +67,9 @@ const tools = [
   { name: "get_node", description: "One node: its documentation (docstring), file, inputs, settings, the metrics it declares and this run's values (and the reference's), its output's digest, its results blocks, log, error.",
     inputSchema: { type: "object", properties: { name: { type: "string", enum: order } }, required: ["name"] },
     run: ({ name }) => snapshot(name) },
-  { name: "get_report", description: "What the report shows now (the overview, the runs page, a group or a node) as text, and the run it shows if not this session's; folds count only when open.",
+  { name: "get_report", description: "What the report shows now (the overview, the run log, a group or a node) as text, and the active run it shows; folds count only when open.",
     inputSchema: { type: "object", properties: {} },
-    run: () => ({ selected: state.sel, viewing: state.viewing, shown: !!state.reportShown, text: ui.report ? ui.report.innerText : "" }) },
+    run: () => ({ selected: state.sel, active: (activeRun() || {}).name || null, shown: !!state.reportShown, text: ui.report ? ui.report.innerText : "" }) },
   { name: "get_source", description: "Read a file of the app, e.g. nodes/train.py or app.yaml (paths relative to the app).",
     inputSchema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
     run: ({ path }) => ({ path, text: textOf(has(path) ? path : `project/${path}`) }) },
@@ -86,29 +78,35 @@ const tools = [
     run: async ({ values, run }) => {
       const warnings = await setSettings(values); refresh();
       const out = { warnings, changed: changedSettings() };
-      if (run) { const r = await runGraph("agent"); out.ok = r.ok; out.failed = r.failed; out.computed = r.computed; out.run = summary(r.run); }
+      if (run) { const r = await runGraph("agent"); out.ok = r.ok; out.failed = r.failed; out.computed = r.computed; out.run = summary(r.run); out.active = state.active; }
       return out; } },
   { name: "run", description: "Run the graph: every node whose code, settings or inputs changed (the rest come from the cache); all:true runs every node again.",
     inputSchema: { type: "object", properties: { all: { type: "boolean" }, source: { type: "string" } } },
     run: async ({ all = false, source } = {}) => {
       const r = await runGraph(source || "agent", all);
-      return { ok: r.ok, failed: r.failed, error: r.error, computed: r.computed, run: summary(r.run),
-        nodes: order.map((n) => ({ name: n, status: state.node[n].status, cached: !!state.node[n].cached, seconds: state.node[n].seconds, error: state.node[n].error })) }; } },
+      return { ok: r.ok, failed: r.failed, error: r.error, computed: r.computed, run: summary(r.run), active: state.active,
+        nodes: order.map((n) => ({ name: n, status: shownStatus(n), cached: !!state.node[n].cached, seconds: state.node[n].seconds, error: state.node[n].error })) }; } },
   { name: "sweep", description: "Grid sweep over settings (grid: {node.param: [values]}): run each combination (only what changed recomputes), then restore the starting settings. Returns each run's headline and the best per metric.",
     inputSchema: { type: "object", properties: { grid: { type: "object" }, max_runs: { type: "number" }, restore: { type: "boolean" } }, required: ["grid"] },
     run: (args) => sweep(args) },
-  { name: "list_runs", description: "Every run: this session's, the run log's, the app's and loaded files (from), each with the settings it changed from the defaults, its data, headline metrics, what it computed, and what differs from the reference. Optionally sorted best-first by a headline metric id.",
+  { name: "list_runs", description: "Every run: this session's, the run log's, the app's and loaded files (from), each with the settings it changed from the defaults, its data, headline metrics, what it computed, and what differs from the active run (code, settings, data). Optionally sorted best-first by a headline metric id.",
     inputSchema: { type: "object", properties: { sort_by: { type: "string", enum: headline.map((m) => m.id) }, limit: { type: "number" } } },
     run: ({ sort_by, limit = 50 } = {}) => {
       const sum = state.summary || { rows: [], best: {}, order: {} }, rowOf = Object.fromEntries(sum.rows.map((r) => [r.name, r]));
       let runs = [...state.runs].sort((a, b) => String(b.doc.made).localeCompare(String(a.doc.made)));
       if (sort_by && sum.order[sort_by]) runs = sum.order[sort_by].map(runByName).filter(Boolean);
-      return { total: state.runs.length, reference: reference() && reference().name, best: sum.best,
+      return { total: state.runs.length, active: state.active, compare: comparedRuns().map((r) => r.name), best: sum.best,
         runs: runs.slice(0, limit).map((r) => ({ ...summary(r), from: r.from, changes: (rowOf[r.name] || {}).changes || [] })) };
     } },
-  { name: "apply_run", description: "Set the settings of a run (others back to defaults); run:true runs it.",
+  { name: "activate_run", description: "Make a run active: the page shows it as it was (its results, metrics, blocks) and takes its settings (others back to defaults) and, where it read the original data, the original data. Its results are kept ones until Run computes them again (with the app's code as it is now); run:true runs at once.",
     inputSchema: { type: "object", properties: { name: { type: "string" }, run: { type: "boolean" } }, required: ["name"] },
-    run: ({ name, run }) => applyRun(name, run) },
+    run: async ({ name, run }) => { const out = await activateRun(name);
+      if (run) { const res = await runGraph("agent"); Object.assign(out, { ok: res.ok, failed: res.failed, computed: res.computed, run: summary(res.run), active: state.active }); }
+      return out; } },
+  { name: "set_compare", description: "Pick the runs the active run is compared with (any in list_runs; [] for none). The comparison is in get_overview, get_node and the report's comparison blocks.",
+    inputSchema: { type: "object", properties: { names: { type: "array", items: { type: "string" } } }, required: ["names"] },
+    run: async ({ names }) => { await setCompare(names || []);
+      return { active: state.active, compare: comparedRuns().map((r) => r.name), changes: Object.fromEntries(comparisons().map(({ run, cmp }) => [run.name, cmp.changes])) }; } },
   { name: "list_files", description: "The files each node's downloads(out) offers (made from its current results only when downloaded), and whether they can be made now.",
     inputSchema: { type: "object", properties: {} },
     run: () => ({ nodes: offering.map((n) => ({ node: n, status: state.node[n].status, ready: filesReady(n), files: state.node[n].files || [],
@@ -124,31 +122,25 @@ const tools = [
       const text = /^(text\/|application\/(json|geo\+json)|image\/svg)/.test(f.media) ? new TextDecoder().decode(bytes) : null;
       return { node, name, media: f.media, bytes: bytes.length, text: text === null ? undefined : text.slice(0, max_chars), truncated: text !== null && text.length > max_chars };
     } },
-  { name: "download_all", description: "Every file the nodes offer and run.json (the run they come from), as one zip download. Needs every node done and current.",
+  { name: "download_all", description: "Every file the nodes offer and run.json (the active run, which they come from), as one zip download. Needs the active run's results current (Run).",
     inputSchema: { type: "object", properties: {} },
     run: () => downloadAll() },
-  { name: "read_output", description: "A node's output as JSON (numpy arrays as lists, tables as {columns, rows}): this session's.",
+  { name: "read_output", description: "A node's output in the active run as JSON (numpy arrays as lists, tables as {columns, rows}): from the worker, or the run file where it keeps it (small outputs).",
     inputSchema: { type: "object", properties: { node: { type: "string", enum: order } }, required: ["node"] },
     run: async ({ node }) => ({ node, output: await readOutput(node) }) },
-  { name: "export_run", description: "This run as a run file (blocks-run/1, made by blocks.runs): settings, data, and per node its metrics, output digest and blocks. save:true downloads it; name defaults to its date and time. Needs every node done and current.",
+  { name: "export_run", description: "The active run as a run file (blocks-run/2, made by blocks.runs): the app's code, settings, data keys, and per node its key, metrics, output digest (and small outputs) and blocks. save:true downloads it; name renames it. Needs a complete run.",
     inputSchema: { type: "object", properties: { name: { type: "string" }, save: { type: "boolean" } } },
     run: ({ name, save = false } = {}) => {
       const run = runFile(name);
       if (save) download(`${run.name}.run.json`, JSON.stringify(run, null, 1), "application/json");
-      return { name: run.name, run, missing: [] };
+      return { name: run.name, run, missing: order.filter((n) => !((run.nodes || {})[n] || {}).blocks) };
     } },
-  { name: "add_run", description: "Load a run file (the JSON from export_run, or a download from the run log) as a run named name, to compare with or view.",
+  { name: "add_run", description: "Load a run file (the JSON from export_run, or run.json from Download) as a run named name, to make active or compare with.",
     inputSchema: { type: "object", properties: { name: { type: "string" }, run: { type: "object" } }, required: ["name", "run"] },
-    run: async ({ name, run }) => { addRun(name, run); await compareRuns(); refresh(); return { previous_runs: loaded().map((r) => r.name), reference: reference() && reference().name }; } },
+    run: async ({ name, run }) => { addRun(name, run); await compareRuns(); refresh(); return { previous_runs: loaded().map((r) => r.name), active: state.active }; } },
   { name: "remove_run", description: "Remove a run from the list.",
     inputSchema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
     run: async ({ name }) => { await removeRun(name); return { previous_runs: loaded().map((r) => r.name) }; } },
-  { name: "set_reference", description: "Pick the run this run is compared with, any run in list_runs (omit name for the default: \"baseline\", else the latest loaded).",
-    inputSchema: { type: "object", properties: { name: { type: "string" } } },
-    run: async ({ name } = {}) => { await setReference(name || null); return { reference: reference() && reference().name, changes: state.cmp ? state.cmp.changes : [] }; } },
-  { name: "view_run", description: "Show a run's results in the whole report instead of this session's (any run in list_runs); omit name to go back to this session's.",
-    inputSchema: { type: "object", properties: { name: { type: "string" } } },
-    run: ({ name } = {}) => { viewRun(name || null); return { viewing: state.viewing }; } },
   { name: "check_data", description: "Check a dataset against the schema the node that reads it declares (SCHEMA): per field the type found, empty values, range, and the rules rows break.",
     inputSchema: { type: "object", properties: { dataset: { type: "string", enum: manifest.datasets.filter((d) => d.schema).map((d) => d.name) } }, required: ["dataset"] },
     run: async ({ dataset }) => {
@@ -180,7 +172,7 @@ const tools = [
     run: ({ shown }) => { setReportShown(shown); return { shown: state.reportShown }; } },
 ];
 // Runs are a block an app can leave out (ui: runs: false), and with them their tools.
-const RUN_TOOLS = ["list_runs", "apply_run", "view_run", "add_run", "remove_run", "set_reference"];
+const RUN_TOOLS = ["list_runs", "activate_run", "set_compare", "add_run", "remove_run"];
 if (!RUNS) tools.splice(0, tools.length, ...tools.filter((t) => !RUN_TOOLS.includes(t.name)));
 function registerWebMCP() {
   const mc = navigator.modelContext;

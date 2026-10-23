@@ -183,13 +183,15 @@ def _dataset_entry(a: dict, d: dict, inline: bool) -> dict:
 
 
 def graph_spec(a: dict, rt: Runtime) -> dict:
-    """The graph as the page and the worker see it: nodes with their inputs, settings, metrics
-    and docs; the edges; the order; where each dataset is mounted; what a run file records of
-    the app (blocks.runs) and the tolerance runs are compared with."""
-    keep = ("name", "file", "doc", "desc", "deps", "settings", "metrics", "view", "downloads", "group")
+    """The graph as the page and the worker see it: nodes with their inputs, settings, metrics,
+    docs and the hash of what they compute; the edges; the order; where each dataset is
+    mounted; what a run file records of the app (blocks.runs: its id, code_sha and Python
+    files) and the tolerance runs are compared with."""
+    keep = ("name", "file", "doc", "desc", "deps", "settings", "metrics", "view", "downloads", "group", "compute_sha")
     g = a["graph"]
     return {"order": g["order"], "edges": g["edges"], "nodes": {n: {k: g["nodes"][n][k] for k in keep} for n in g["order"]},
             "datasets": {d["name"]: {"at": d["at"]} for d in a["datasets"].values()},
+            "code": [p for p in a["files"] if p.endswith(".py")],   # what a run file keeps of the app (blocks.runs)
             "app": {"id": a["id"], "project": a["project"], "title": a["title"], "code_sha": a["code_sha"],
                     "runtime": {"pyodide": rt.version, "packages": rt.versions(a["packages"])}},
             "verify": a["verify"]}

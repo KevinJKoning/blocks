@@ -91,7 +91,7 @@ over the port, and the host checks every request against the view's declaration.
 | `bridge.view` | — | `{name, title, at, reads, can}` |
 | `bridge.ready(summary?)` | — | required; call once the first state is **drawn** |
 | `bridge.describe(obj)` | — | optional JSON summary of what is on screen, for agents and harvest |
-| `bridge.on("update", fn)` | — | new state: per node `status`, `cached`, `metrics`, `shown` (`run`, or `viewed` while the report shows another run), `compare`; per dataset `status`, `original`, `path`, `profile`, `schema`; `reference` and `runs`; `settings`; `headline`. Return a promise that settles when the drawing is done |
+| `bridge.on("update", fn)` | — | new state: per node, in the active run, `status` (`done`, `kept`, `stale`, …), `cached`, `readable` (its output can be read), `metrics`; per dataset `status`, `original`, `path`, `profile`, `schema`; `active` (the run shown), `compare` and `runs`; `settings`; `headline`. Return a promise that settles when the drawing is done |
 | `bridge.on("theme", fn)` | — | theme or mode changed |
 | `bridge.read(name)` | in `reads` | a node's output as JSON (numpy arrays as lists, tables as `{columns, rows}`), or a dataset's bytes (up to 64 MB) |
 | `bridge.settings()` | — | current settings and their ranges (read-only) |

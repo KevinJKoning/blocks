@@ -320,7 +320,7 @@ const handlers = {
   convert: ingestConvert,
   // the graph: every node whose key changed (or the named ones), cached ones reported as such
   run: ({ settings, data, only, source }) => JSON.parse(session.run(JSON.stringify(settings), JSON.stringify(data), JSON.stringify(only || null), source || "ui")),
-  compare: ({ run, ref }) => JSON.parse(session.compare(JSON.stringify(run), JSON.stringify(ref || null))),
+  compare: ({ run, refs }) => JSON.parse(session.compare(JSON.stringify(run), JSON.stringify(refs || []))),
   summarize: ({ runs, ref }) => JSON.parse(session.summarize(JSON.stringify(runs), JSON.stringify(ref || null))),
   output: ({ name }) => JSON.parse(session.output(name)),
   // a node's downloads(out), made into bytes only now: one file, or every file and the run file as a zip

@@ -2,7 +2,8 @@
 of blocks.ui, where every block the page draws is defined.
 
 A page reads top to bottom: what it is (a docstring, the app's question), what changes it
-(settings, live controls), what it found (`results`: the node's run, filled by the page),
+(settings, live controls), what it found (`results`: the node's run, filled by the page;
+`comparison`: the same against the runs selected in the run log),
 where its views go (`views`), and a fold with the reference material (the data it reads
 and its schema check, what it reads and what reads it, its code). Blocks marked live are
 filled by the page from this session's state.
@@ -18,7 +19,10 @@ def node_page(a: dict, n: str) -> list[dict]:
     out = [ui.markdown(node["doc"])] if node["doc"] else []
     if node["settings"]:
         out.append(ui.settings([f"{n}.{k}" for k in node["settings"]]))
-    out += [ui.results(), ui.views()]
+    out.append(ui.results())
+    if a["ui"]["runs"]:
+        out.append(ui.comparison())
+    out.append(ui.views())
     about = [ui.dataset(d["name"]) for d in node["deps"] if d["kind"] == "dataset"]
     reads = [{"node": d["name"]} if d["kind"] == "node" else {"dataset": d["name"]} for d in node["deps"]]
     if reads:
@@ -44,7 +48,8 @@ def overview_page(a: dict) -> list[dict]:
         out.append(ui.markdown(a["description"]))
     if any(m["headline"] for m in a["metrics"]):
         out.append(ui.headline())
-    out.append(ui.changes())
+    if a["ui"]["runs"]:
+        out.append(ui.comparison())
     out += [ui.pick(o["node"], o["block"]) for o in a["overview"]]
     out.append(ui.views())
     if a["ui"]["runs"]:

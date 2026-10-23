@@ -28,6 +28,7 @@ SPEC = {
                    "downloads": True},
     },
     "app": {"id": "toy", "project": "toy", "title": "Toy", "code_sha": "c0de", "runtime": {"pyodide": "0"}},
+    "code": ["nodes/numbers.py", "nodes/total.py", "nodes/square.py"],
     "verify": {"rel_tol": 1e-9, "abs_tol": 1e-12},
 }
 DATA = {}
@@ -46,7 +47,7 @@ def test_a_run_computes_every_node_then_only_what_a_change_reaches(app):
     r = g.run({}, {})
     assert {n: (x["status"], x["cached"]) for n, x in r.items()} == {"numbers": ("done", False), "total": ("done", False), "square": ("done", False)}
     assert r["total"]["metrics"] == {"total": 6, "count": 3}
-    assert [b["id"] for b in r["total"]["blocks"]] == ["metrics", "markdown-2", "d"]
+    assert [b["id"] for b in r["total"]["blocks"]] == ["metrics", "markdown-1", "d"]   # by type and place among that type
     assert r["total"]["blocks"][0]["items"][0] == {"key": "total", "label": "total", "goal": "max", "headline": True, "value": 6}
     assert r["total"]["blocks"][2]["profile"] == {"kind": "table", "rows": 2, "columns": [{"name": "x", "type": ""}], "head": [[1], [2]]}
     # a setting of total: only total runs again
@@ -91,10 +92,15 @@ def test_the_session_speaks_json(app):
     assert rec["format"] == runs.FORMAT and rec["complete"] and rec["ran"] == ["numbers", "total", "square"]
     assert rec["settings"] == {"numbers.n": 2, "total.scale": 1} and rec["changed_settings"] == {"numbers.n": 2}
     assert rec["headline"] == {"total:total": 3} and rec["app"] == "toy"
+    # a snapshot: the app's code, each node's key, and its output where it is small (in the record only)
+    assert rec["code"] == {f"nodes/{n}.py": src for n, src in NODES.items()}
+    assert rec["nodes"]["total"]["output"] == {"total": 3, "count": 2} and "output" not in out["nodes"]["total"]
+    assert all(len(rec["nodes"][n]["key"]) == 64 for n in SPEC["order"]) and out["nodes"]["total"]["key"] == rec["nodes"]["total"]["key"]
     again = json.loads(s.run(json.dumps({"numbers.n": 2}), "{}"))["record"]
     assert again["ran"] == [] and again["nodes"]["total"]["digest"] == rec["nodes"]["total"]["digest"]
-    c = json.loads(s.compare(json.dumps(again), json.dumps(rec)))
-    assert c["verified"] == "match" and c["changes"] == []
+    assert again["nodes"]["total"]["key"] == rec["nodes"]["total"]["key"]                   # cached: the same key
+    c = json.loads(s.compare(json.dumps(again), json.dumps([rec])))
+    assert len(c) == 1 and c[0]["verified"] == "match" and c[0]["changes"] == []
 
 
 def test_downloads_offer_files_made_only_when_asked(app):
@@ -148,6 +154,25 @@ def test_one_rule_compares_runs(app):
     assert runs.compare(ref, None, SPEC, SPEC["verify"])["verified"] == "no-baseline"
     s = runs.summarize([ref, better], ref, SPEC, SPEC["verify"])
     assert s["best"] == {"total:total": better["name"]} and s["rows"][1]["headline"]["total:total"]["better"]
+
+
+def test_a_large_output_is_kept_by_digest_only():
+    assert graph_mod.small_output({"x": list(range(10))}) == {"x": list(range(10))}
+    assert graph_mod.small_output({"x": list(range(graph_mod.OUTPUT_CELLS + 1))}) is None   # too many values
+    assert graph_mod.small_output("x" * (graph_mod.OUTPUT_BYTES + 1)) is None                # too many bytes
+
+
+def test_comparing_runs_names_code_changes_and_removed_nodes(app):
+    ref = run_file(app, {})
+    run = {**ref, "code_sha": "other", "nodes": {**ref["nodes"], "total": {**ref["nodes"]["total"], "code": "new"}}}
+    del run["nodes"]["square"]
+    assert runs.changes(run, ref) == [{"kind": "code", "from": "c0de", "to": "other", "nodes": ["total"], "added": [], "removed": ["square"]}]
+    c = runs.compare(run, ref, SPEC, SPEC["verify"])
+    assert c["nodes"]["square"]["verdict"] == "missing" and c["verified"] == "differs"      # a removed node is not a match
+    grown = {**ref, "nodes": {**ref["nodes"], "total": {**ref["nodes"]["total"], "metrics": {**ref["nodes"]["total"]["metrics"], "new": 1}}}}
+    assert runs.compare(grown, ref, SPEC, SPEC["verify"])["nodes"]["total"]["metrics"]["new"]["differs"]   # a new metric too
+    b = runs.brief(ref)
+    assert "blocks" not in json.dumps(b) and runs.changes(b, runs.brief(run))[0]["kind"] == "code"   # briefs compare like runs
 
 
 def test_data_is_the_same_when_its_key_is():

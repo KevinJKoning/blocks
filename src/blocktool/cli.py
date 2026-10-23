@@ -84,10 +84,14 @@ def cmd_supersede(repo: Path, args) -> int:
     dest = a["dir"] / "superseded" / args.name
     if dest.exists():
         raise SystemExit(f"{dest.relative_to(repo)} already exists")
-    keep = set(a["files"]) | {"app.yaml"} | ({spec.BASELINE} if a["baseline"] else set())
+    keep = set(a["files"]) | {"app.yaml"}
     for rel in sorted(keep):
         (dest / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(a["dir"] / rel, dest / rel)
+    if a["baseline"]:
+        # the same run, now of the superseded app: compared with the next version, it is that version's
+        from .harvest import write_json
+        write_json(dest / spec.BASELINE, {**a["baseline"], "app": f"{args.project}/{args.name}"})
     cfg = spec._yaml(dest / "app.yaml")
     if any(str(r).startswith("superseded/") for r in cfg.get("runs") or []):
         # the copy has no superseded/ of its own: it ships only its own runs
@@ -114,7 +118,8 @@ def cmd_build(repo: Path, args) -> int:
         base = a["baseline"]
         if not args.no_verify:
             if not base:
-                print(f"{a['id']}: no baseline; run `blocks baseline {a['id']}` first (or build with --no-verify)", file=sys.stderr)
+                print(f"{a['id']}: no baseline (or one of an older run format); run `blocks baseline {a['id']}` first "
+                      "(or build with --no-verify)", file=sys.stderr)
                 failed += 1
                 continue
             if base.get("code_sha") != a["code_sha"]:

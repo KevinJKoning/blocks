@@ -2,11 +2,10 @@
 //
 // A page's blocks come with it (blocktool/docs.py), and some are live: a dataset's state
 // and check, the settings as controls, and a node's results, which are the blocks its
-// view(out) made of its output (blocks.ui). A block of a node's results also shows the
-// reference run's block with the same node and id, where that means something: metrics
-// add its values and Δ, charts draw its series dashed underneath.
+// view(out) made of its output (blocks.ui), as the active run keeps them. Result blocks draw
+// one run; comparing runs is the comparison block's alone (it pairs blocks by node and id).
 
-// ctx: {node, side}: the node the blocks belong to, and which run they come from.
+// ctx: {node}: the node the blocks belong to.
 function renderBlocks(list, ctx = {}) {
   return list.map((b) => {
     const draw = BLOCKS[b.type];
@@ -17,14 +16,11 @@ function renderBlocks(list, ctx = {}) {
       b.title && b.type !== "fold" ? h("h3", {}, b.title) : null, body);
   });
 }
-// The reference's version of a block of this run (same node, same id), or null.
-const refOf = (b, ctx) => ctx.node && ctx.side === "run" && comparable(ctx.node) ? refBlock(ctx.node, b.id) : null;
-
 const BLOCKS = {
   markdown: (b) => h("div", { class: "doc", "data-doc": b.doc || null }, markdown(b.text)),
-  metrics: (b, ctx) => metricsTable(b, refOf(b, ctx), ctx),
+  metrics: (b) => metricsTable(b),
   table: (b) => tableOf(b.columns, b.rows, b.total),
-  chart: (b, ctx) => { const ref = refOf(b, ctx); return chart(b, ref, ref && reference().name); },
+  chart: (b) => chart(b),
   data: (b) => fileCard(b),
   figure: (b) => h("figure", { class: "figure" }, h("img", { src: b.media === "image/svg+xml" ? URL.createObjectURL(new Blob([b.data], { type: b.media }))
     : imageFromBase64(b.data, b.media), alt: b.caption || "figure" }), b.caption ? h("figcaption", { class: "small" }, b.caption) : null),
@@ -40,16 +36,17 @@ const BLOCKS = {
   code: (b) => { const text = has(`project/${b.path}`) ? textOf(`project/${b.path}`) : null;
     return text !== null ? h("details", { class: "fold" }, h("summary", {}, b.path), h("pre", { class: "src" }, text)) : null; },
   contents: (b) => contentsList(b.nodes),
-  // the overview's and a group's, made from this session's state
+  // the overview's and a group's, made from the active run
   headline: () => headline.length ? headlineTable() : null,
-  changes: () => reference() && state.cmp && !viewed() ? changesLine(reference()) : null,
+  // the active run against the selected runs: the overview's (headline) or a node's (its metrics and charts)
+  comparison: (b, ctx) => comparisonBlock(ctx.node || null),
   runs: () => runsTable(),
   "runs-link": () => runsLink(),
   nodes: (b) => nodesTable(b.nodes),
   // a block of a node's results, shown on another page (app.yaml overview:)
-  pick: (b) => { const rec = state.node[b.node], blk = rec && rec.blocks && rec.blocks.find((x) => x.id === b.block);
+  pick: (b) => { const rec = shown(b.node) ? shownNode(b.node) : null, blk = rec && (rec.blocks || []).find((x) => x.id === b.block);
     if (!blk) return null;
-    const draw = BLOCKS[blk.type], ctx = { node: b.node, side: shownSide(b.node) };
+    const draw = BLOCKS[blk.type], ctx = { node: b.node };
     return h("div", {}, blk.title ? h("h3", {}, blk.title, " ", h("span", { class: "muted small" }, "from "), nodeLink(b.node)) : null, draw(blk, ctx)); },
 };
 const imageFromBase64 = (data, media) => URL.createObjectURL(new Blob([fromBase64(data)], { type: media }));
@@ -60,19 +57,17 @@ const tableOf = (columns, rows, total) => h("div", { class: "runs-wrap" }, h("ta
 
 // ---- metrics
 // What the node declares first; when it declares some, the other numbers its output holds
-// are folded under "Other metrics". Next to the reference's block, each item's cell from
-// the comparison (blocks.runs).
-function metricsTable(b, ref, ctx) {
+// are folded under "Other metrics".
+function metricsTable(b) {
   if (!b.items.length) return h("p", { class: "muted small" }, "No metrics.");
-  const table = (items) => h("table", { class: "kv metrics" }, h("thead", {}, h("tr", {}, h("th", {}, "metric"),
-    h("th", { class: "num" }, ctx.side === "viewed" ? viewed().name : "this run"),
-    ref ? [h("th", { class: "num" }, runLabel_(reference())), h("th", { class: "num" }, "Δ")] : null)),
-    h("tbody", {}, items.map((it) => { const c = ref ? blockCell(ctx.node, b.id, it.key) : null;
-      return h("tr", { "data-metric": it.key, class: it.undeclared ? "undeclared" : null },
-        h("td", { title: it.key }, it.label), h("td", { class: "num" }, fmt(it.value)),
-        ref ? [h("td", { class: "num" }, fmt(c ? c.ref : undefined)), deltaCell(c)] : null); })));
-  const main = b.items.filter((it) => !it.undeclared), rest = b.items.filter((it) => it.undeclared);
-  if (!main.length || !rest.length) return table(b.items);
+  return folded(b.items, (items) => h("table", { class: "kv metrics" }, h("thead", {}, h("tr", {}, h("th", {}, "metric"), h("th", { class: "num" }, "value"))),
+    h("tbody", {}, items.map((it) => h("tr", { "data-metric": it.key, class: it.undeclared ? "undeclared" : null },
+      h("td", { title: it.key }, it.label), h("td", { class: "num" }, fmt(it.value)))))));
+}
+// Rows as one table, the undeclared ones folded under "Other metrics" when there are declared ones too.
+function folded(items, table) {
+  const main = items.filter((it) => !it.undeclared), rest = items.filter((it) => it.undeclared);
+  if (!main.length || !rest.length) return table(items);
   return [table(main), h("details", { class: "fold" }, h("summary", {}, `Other metrics (${rest.length})`), table(rest))];
 }
 // A comparison cell (blocks.runs.cell) as Δ: "=" within the tolerance, else the change,
@@ -83,64 +78,105 @@ function deltaCell(c) {
   if (c.delta === null) return h("td", { class: "num delta changed" }, "≠");
   return h("td", { class: `num delta ${c.better === null ? "changed" : c.better ? "better" : "worse"}` }, signed(c.delta));
 }
+// The active run's headline metrics.
 function headlineTable() {
-  const v = viewed(), now = v ? v.doc.headline || {} : headlineNow(), r = v ? null : reference();
-  return h("table", { class: "kv headline" }, h("thead", {}, h("tr", {}, h("th", {}, "headline"), h("th", { class: "num" }, v ? v.name : "this run"),
-    r ? [h("th", { class: "num" }, runLabel_(r)), h("th", { class: "num" }, "Δ")] : null, h("th", { class: "num" }, "goal"))),
-    h("tbody", {}, headline.map((m) => { const c = headlineCell(m.id);
-      return h("tr", { "data-headline": m.id }, h("td", {}, m.label), h("td", { class: "num" }, fmt(now[m.id])),
-        r ? [h("td", { class: "num" }, fmt(c ? c.ref : (r.doc.headline || {})[m.id])), deltaCell(c)] : null, h("td", { class: "num small muted" }, m.goal)); })));
+  const now = (activeDoc() || {}).headline || {};
+  return h("table", { class: "kv headline" }, h("thead", {}, h("tr", {}, h("th", {}, "headline"), h("th", { class: "num" }, "value"), h("th", { class: "num" }, "goal"))),
+    h("tbody", {}, headline.map((m) => h("tr", { "data-headline": m.id }, h("td", {}, m.label), h("td", { class: "num" }, fmt(now[m.id])),
+      h("td", { class: "num small muted" }, m.goal)))));
+}
+
+// ---- comparison
+// The active run against each selected run (blocks.runs.compare_many): what changed in their
+// inputs, then, on the overview, the headline metrics; on a node's page, whether its output
+// is the same, its metrics, and its charts with the selected runs' series dashed underneath
+// (a run's block with the same node and id).
+function comparisonBlock(n) {
+  if (!RUNS) return null;
+  const a = activeRun(), cs = comparisons();
+  if (n && (!shown(n) || !cs.length)) return null;
+  if (!a || !cs.length) return h("p", { class: "small muted", "data-comparison": "" }, "Select runs in the ",
+    h("button", { class: "btn link", "data-action": "open-runs", onclick: () => select({ kind: "runs" }) }, "Run log"), " to compare them with this one.");
+  const head = (first) => h("thead", {}, h("tr", {}, h("th", {}, first), h("th", { class: "num" }, runLabel_(a)),
+    cs.map(({ run }) => [h("th", { class: "num" }, runLabel_(run)), h("th", { class: "num" }, "Δ")])));
+  const changes = h("ul", { class: "small compare-changes" }, cs.map(({ run, cmp }) => { const c = changesFor(cmp.changes, n);
+    return h("li", { "data-changes": run.name }, h("span", { class: "mono" }, runLabel_(run)), ": ", c.length ? c.map(changeText).join("; ") : "same settings, data and code"); }));
+  if (!n) {
+    if (!headline.length) return changes;
+    const now = a.doc.headline || {};
+    return [changes, h("table", { class: "kv headline compare" }, head("headline"),
+      h("tbody", {}, headline.map((m) => h("tr", { "data-headline": m.id }, h("td", {}, m.label), h("td", { class: "num" }, fmt(now[m.id])),
+        cs.map(({ cmp }) => { const c = cmp.headline[m.id]; return [h("td", { class: "num" }, fmt(c ? c.ref : undefined)), deltaCell(c)]; })))))];
+  }
+  const VERDICT = { match: "same output", differs: "output differs", "no-baseline": "not in that run", error: "failed", missing: "not in this run" };
+  const verdicts = h("tr", { "data-verdict": "" }, h("td", {}, "output"), h("td", {}),
+    cs.map(({ cmp }) => { const v = (cmp.nodes[n] || {}).verdict; return [h("td", { class: "num small" }, VERDICT[v] || v || ""), h("td", {})]; }));
+  const decl = new Set(declaredFor(n).map((m) => m.key)), label = Object.fromEntries(declaredFor(n).map((m) => [m.key, m.label]));
+  const mine = shownNode(n).metrics || {};
+  const keys = [...new Set([...Object.keys(mine), ...cs.flatMap(({ cmp }) => Object.keys((cmp.nodes[n] || {}).metrics || {}))])]
+    .sort((x, y) => decl.has(y) - decl.has(x));
+  const items = keys.map((key) => ({ key, label: label[key] || key, undeclared: decl.size > 0 && !decl.has(key) }));
+  const table = (rows, first) => h("table", { class: "kv metrics compare" }, head("metric"), h("tbody", {}, first ? verdicts : null,
+    rows.map((it) => h("tr", { "data-metric": it.key }, h("td", { title: it.key }, it.label), h("td", { class: "num" }, fmt(mine[it.key])),
+      cs.map(({ cmp }) => { const c = ((cmp.nodes[n] || {}).metrics || {})[it.key]; return [h("td", { class: "num" }, fmt(c ? c.ref : undefined)), deltaCell(c)]; })))));
+  const charts = (shownNode(n).blocks || []).filter((b) => b.type === "chart").map((b) => {
+    const refs = cs.map(({ run }) => ({ name: runLabel_(run), block: (((run.doc.nodes || {})[n] || {}).blocks || []).find((x) => x.id === b.id && x.type === "chart") }))
+      .filter((x) => x.block);
+    return refs.length ? h("div", { "data-compare-chart": b.id }, b.title ? h("h4", {}, b.title) : null, chart(b, refs)) : null;
+  });
+  const main = items.filter((it) => !it.undeclared), rest = items.filter((it) => it.undeclared);
+  return [changes, main.length && rest.length ? [table(main, true), h("details", { class: "fold" }, h("summary", {}, `Other metrics (${rest.length})`), table(rest))]
+    : table(items, true), charts];
 }
 // The run log: every run, newest first, with where it comes from, what differs from the
-// reference, its headline metrics (the best of each marked), and what to do with it:
-// compare with it (the reference), view its results, apply its settings, download it,
-// remove it. The comparisons are the worker's (blocks.runs.summarize).
+// active run, its headline metrics (the best of each marked), and two choices: which run is
+// active (the page shows it as it was) and which are compared with it. The comparisons are
+// the worker's (blocks.runs.summarize).
 const RUN_FROM = { session: "this session", log: "an earlier session", app: "shipped with the app", file: "loaded file" };
 function runsTable() {
   const files = h("input", { type: "file", hidden: true, multiple: true, accept: ".json", "aria-label": "Run files",
     onchange: async (e) => { try { await addRunFiles([...e.target.files]); } catch (err) { note.textContent = `Not loaded: ${err.message}`; note.className = "small hint warn"; } } });
   const note = h("p", { class: "small muted" }, "Every run that computes something is kept here", linked ? " and in runs.jsonl on the dev server" : "",
-    ". Load run files (*.run.json) of this app or another version of it to compare with; a file named baseline.run.json is the default reference.");
+    ". Make one active to show it as it was (its settings, results and metrics); select others to compare them with it. ",
+    "Load run files (*.run.json) of this app or another version of it to compare with.");
   const controls = h("div", { class: "runs-controls" }, files,
-    h("button", { class: "btn", "data-action": "add-runs", onclick: () => files.click() }, "Load run files…"),
-    state.runs.some((r) => r.from === "session") ? h("button", { class: "btn", "data-action": "download-session", onclick: () => download(`${manifest.name}-runs.json`,
-      JSON.stringify(state.runs.filter((r) => r.from === "session").map((r) => r.doc), null, 1), "application/json") }, "Download this session's runs") : null);
+    h("button", { class: "btn", "data-action": "add-runs", onclick: () => files.click() }, "Load run files…"));
   if (!state.runs.length) return [note, h("p", { class: "small muted" }, "No runs yet."), controls];
-  const sum = state.summary || { rows: [], best: {} }, ref = reference(), v = viewed();
+  const sum = state.summary || { rows: [], best: {} }, a = activeRun();
   const rowOf = Object.fromEntries(sum.rows.map((r) => [r.name, r]));
-  const runs = [...state.runs].sort((a, b) => String(b.doc.made).localeCompare(String(a.doc.made)));
-  const act = (name, label, title, fn) => h("button", { class: "btn link", "data-action": name, title, onclick: fn }, label);
+  const runs = [...state.runs].sort((x, y) => String(y.doc.made).localeCompare(String(x.doc.made)));
   return [note, h("div", { class: "runs-wrap" }, h("table", { class: "kv runs" },
-    h("thead", {}, h("tr", {}, h("th", { title: "The run this one is compared with" }, "vs"), h("th", {}, "run"), h("th", {}, ref ? `changed from ${ref.name}` : "changed"),
+    h("thead", {}, h("tr", {}, h("th", { title: "The run the page shows" }, "active"), h("th", { title: "Runs compared with the active one" }, "compare"),
+      h("th", {}, "run"), h("th", {}, a && a.name ? `changed from ${a.name}` : "changed"),
       headline.map((m) => h("th", { class: "num", title: `${m.id} (${m.goal})` }, m.label)))),
-    h("tbody", {}, runs.slice(0, 200).map((r) => { const row = rowOf[r.name] || { changes: [] };
-      return h("tr", { "data-run": r.name, class: [r === ref ? "reference" : "", r === v ? "viewed" : ""].join(" ").trim() || null },
-        h("td", {}, h("input", { type: "radio", name: "reference", checked: r === ref, "aria-label": `Compare with ${r.name}`, onchange: () => setReference(r.name) })),
+    h("tbody", {}, runs.slice(0, 200).map((r) => { const row = rowOf[r.name] || { changes: [] }, on = r === a;
+      return h("tr", { "data-run": r.name, class: on ? "active" : null },
+        h("td", {}, h("input", { type: "radio", name: "active-run", checked: on, "data-action": "activate-run", "aria-label": `Make ${r.name} active`,
+          disabled: state.busy, onchange: () => activateRun(r.name).catch((e) => console.error(e)) })),
+        h("td", {}, h("input", { type: "checkbox", checked: state.compare.includes(r.name) && !on, disabled: on, "data-action": "compare-run",
+          "aria-label": `Compare with ${r.name}`, onchange: (e) => toggleCompare(r.name, e.target.checked).catch((err) => console.error(err)) })),
         h("td", { class: "small run-cell" }, h("div", { class: "mono run-name", title: r.name }, r.name),
           h("div", { class: "muted" }, RUN_FROM[r.from] || r.from, sameApp(r) ? "" : ` · ${r.doc.app}`,
             r.doc.seconds != null ? ` · ${fmtSec(r.doc.seconds)}` : ""),
-          h("div", { class: "actions" },
-            r === v ? act("back-to-run", "back", "Show this session's results again", () => viewRun(null))
-              : act("view-run", "view", "Show this run's results in the report", () => { viewRun(r.name); select({ kind: "overview" }); }),
-            act("apply-run", "apply", "Set these settings (Run to compute them)", () => applyRun(r.name)),
-            act("download-run", "download", "Save this run file", () => download(`${manifest.name}-${r.name}.run.json`, JSON.stringify(r.doc, null, 1), "application/json")),
-            r.from === "session" ? null : act("remove-run", "remove", "Take it out of the list", () => removeRun(r.name)))),
-        h("td", { class: "small mono" }, r === ref ? h("span", { class: "muted" }, "the reference") : row.changes.length ? row.changes.map(changeText).join("; ") : h("span", { class: "muted" }, "nothing")),
+          r.from === "session" ? null : h("div", { class: "actions" }, h("button", { class: "btn link", "data-action": "remove-run",
+            title: "Take it out of the list", onclick: () => removeRun(r.name) }, "remove"))),
+        h("td", { class: "small mono" }, on ? h("span", { class: "muted" }, "the active run") : row.changes.length ? row.changes.map(changeText).join("; ") : h("span", { class: "muted" }, "nothing")),
         headline.map((m) => h("td", { class: `num${sum.best[m.id] === r.name ? " best" : ""}` }, fmt((r.doc.headline || {})[m.id])))); })))),
     controls];
 }
-// On the overview: how many runs, which is the reference, and the way to all of them.
+// On the overview: how many runs, the active one and those compared with it, and the way to all of them.
 function runsLink() {
-  const mine = state.runs.filter((r) => r.from === "session").length, other = state.runs.length - mine, ref = reference();
+  const mine = state.runs.filter((r) => r.from === "session").length, other = state.runs.length - mine, a = activeRun(), cs = comparedRuns();
   return h("p", { class: "small", "data-runs-link": "" }, `${fmtCount(mine, "run")} this session${other ? `, ${other} loaded` : ""}`,
-    ref ? h("span", { class: "muted" }, ` · compared with ${runLabel_(ref)}`) : null, " · ",
+    a && a.name ? h("span", { class: "muted" }, ` · showing ${runLabel_(a)}`) : null,
+    cs.length ? h("span", { class: "muted" }, ` · compared with ${cs.map(runLabel_).join(", ")}`) : null, " · ",
     h("button", { class: "btn link", "data-action": "open-runs", onclick: () => select({ kind: "runs" }) }, "Run log"));
 }
 function nodesTable(names) {
   return h("table", { class: "kv group-results" }, h("thead", {}, h("tr", {}, h("th", {}, "node"), h("th", {}, "state"), h("th", {}, "metrics"))),
     h("tbody", {}, names.map((n) => h("tr", { "data-node": n }, h("td", {}, nodeLink(n), nodes[n].desc ? h("div", { class: "small muted" }, nodes[n].desc) : null),
-      h("td", {}, h("span", { class: `pill ${state.node[n].status}` }, stateLabel(n))),
-      h("td", { class: "small" }, declaredFor(n).map((m) => h("div", {}, `${m.label} `, h("span", { class: "mono" }, fmt(ran(n) ? metricValue(state.node[n], m) : undefined)))))))));
+      h("td", {}, h("span", { class: `pill ${shownStatus(n)}` }, stateLabel(n))),
+      h("td", { class: "small" }, declaredFor(n).map((m) => h("div", {}, `${m.label} `, h("span", { class: "mono" }, fmt(shown(n) ? metricValue(shownNode(n), m) : undefined)))))))));
 }
 
 // ---- data
@@ -245,8 +281,10 @@ function ticks(lo, hi, n = 5) {
   for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-9; v += step) out.push(Number(v.toPrecision(10)));
   return out;
 }
-function chart(b, ref, refName) {
-  const all = [b, ref].filter(Boolean);
+// refs: other runs' versions of the chart, [{name, block}], drawn faint and dashed underneath.
+const DASHES = ["4 3", "1 3", "8 3 2 3", "2 2"];
+function chart(b, refs = []) {
+  const all = [b, ...refs.map((r) => r.block)];
   const finite = (xs) => xs.filter((v) => typeof v === "number" && Number.isFinite(v));
   const allX = finite(all.flatMap((c) => c.x)), allY = finite(all.flatMap((c) => c.series.flatMap((s) => s.y)));
   if (!allX.length || !allY.length) return h("p", { class: "muted small" }, "No numeric data to draw.");
@@ -255,28 +293,28 @@ function chart(b, ref, refName) {
   const pad = (y1 - y0) * 0.06 || 1; y0 -= pad; y1 += pad;
   const sx = (v) => L + (v - x0) / (x1 - x0 || 1) * (W - L - R), sy = (v) => T + (1 - (v - y0) / (y1 - y0 || 1)) * (H - T - B);
   const svg = h("svg:svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, role: "img",
-    "aria-label": `${b.title || "chart"}: ${b.series.map((s) => s.name).join(", ")}${ref ? `, with ${refName}` : ""}` });
+    "aria-label": `${b.title || "chart"}: ${b.series.map((s) => s.name).join(", ")}${refs.length ? `, with ${refs.map((r) => r.name).join(", ")}` : ""}` });
   const grid = h("svg:g", { class: "grid" });
   for (const t of ticks(y0, y1)) grid.append(h("svg:line", { x1: L, x2: W - R, y1: sy(t), y2: sy(t) }), h("svg:text", { x: L - 6, y: sy(t) + 4, "text-anchor": "end" }, fmt(t)));
   for (const t of ticks(x0, x1)) grid.append(h("svg:text", { x: sx(t), y: H - B + 16, "text-anchor": "middle" }, fmt(t)));
   svg.append(grid, h("svg:text", { x: (L + W - R) / 2, y: H - 4, "text-anchor": "middle" }, b.x_label || ""));
   if (y0 < 0 && y1 > 0) svg.append(h("svg:line", { class: "zero", x1: L, x2: W - R, y1: sy(0), y2: sy(0) }));
   const colors = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)"];
-  const draw = (c, faint) => c.series.forEach((s, i) => {
-    const col = faint ? "var(--faint)" : colors[i % colors.length];
+  const draw = (c, dash) => c.series.forEach((s, i) => {
+    const col = dash ? "var(--faint)" : colors[i % colors.length];
     const pts = c.x.map((xv, j) => [xv, s.y[j]]).filter(([xv, yv]) => Number.isFinite(xv) && Number.isFinite(yv));
     if (s.kind === "scatter") {
-      const g = h("svg:g", faint ? { class: "base", fill: "none", stroke: col } : { fill: col, "fill-opacity": 0.55 });
+      const g = h("svg:g", dash ? { class: "base", fill: "none", stroke: col } : { fill: col, "fill-opacity": 0.55 });
       for (const [xv, yv] of pts) g.append(h("svg:circle", { cx: sx(xv), cy: sy(yv), r: 2.4 }));
       svg.append(g);
     } else {
       const d = pts.map(([xv, yv], j) => `${j ? "L" : "M"}${sx(xv).toFixed(1)},${sy(yv).toFixed(1)}`).join("");
-      svg.append(h("svg:path", { d, fill: "none", stroke: col, "stroke-width": 2, class: faint ? "base" : null }));
+      svg.append(h("svg:path", { d, fill: "none", stroke: col, "stroke-width": 2, class: dash ? "base" : null, "stroke-dasharray": dash || null }));
     }
   });
-  if (ref) draw(ref, true);
-  draw(b, false);
-  const legend = [...(b.series.length > 1 ? b.series.map((s, i) => h("span", { cssvars: { "--c": colors[i % colors.length] } }, s.name)) : []),
-    ref ? h("span", { class: "base", cssvars: { "--c": "var(--faint)" } }, refName) : null].filter(Boolean);
+  refs.forEach((r, i) => draw(r.block, DASHES[i % DASHES.length]));
+  draw(b, null);
+  const legend = [...(b.series.length > 1 || refs.length ? b.series.map((s, i) => h("span", { cssvars: { "--c": colors[i % colors.length] } }, s.name)) : []),
+    ...refs.map((r) => h("span", { class: "base", cssvars: { "--c": "var(--faint)" } }, r.name))];
   return h("div", { "data-plot": b.id }, svg, legend.length ? h("div", { class: "chart-legend" }, legend) : null);
 }

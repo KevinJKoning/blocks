@@ -1,16 +1,21 @@
-"""Runs as data (docs/runs.md): a run file records one run of the graph, and one rule
-compares two of them. This module is the only place either is defined: the page's worker
+"""Runs as data (docs/runs.md): a run file is a snapshot of one run of the graph, and one
+rule compares runs. This module is the only place either is defined: the page's worker
 makes a run file after every run (blocks.session), the page shows comparisons it asks the
 worker for, and the tooling verifies a run against its baseline with the same `compare`.
 
-A run file (blocks-run/1):
+A run file (blocks-run/2) keeps what is cheap in full and what is expensive by hash:
 
-    {format, name, app, project, title, made, code_sha, runtime, source, ran, seconds,
-     complete, settings, changed_settings, data, nodes: {name: {status, seconds, metrics,
-     digest, blocks, files, error}}, headline}
+    {format, name, app, project, title, made, code_sha, code: {path: source}, runtime,
+     source, ran, seconds, complete, settings, changed_settings, data,
+     nodes: {name: {status, seconds, key, code, metrics, digest, output, blocks, files, error}},
+     headline}
 
-`files` names what the node's downloads(out) offered: the files are made from outputs, which
-a run file does not keep.
+`code` is the app's Python as it was (nodes and helpers); each node's `code` is the hash of
+what it computes (its file without views, downloads, docstrings and declarations) and its
+`key` the graph's cache key, so two runs of a node with the same key have the same output.
+`output` is the node's output as JSON when it is small (blocks.graph.small_output), else
+absent: the `digest` stands for it. `blocks` are what the page showed. `files` names what
+downloads(out) offered: the files are made from outputs, when downloaded.
 
 `data` is {dataset: {key, original, file}}: `key` identifies the bytes (the recorded sha256,
 a swapped file's sha256, or a format adapter's fingerprint), the same key the graph's cache
@@ -22,7 +27,7 @@ import datetime
 import math
 import sys
 
-FORMAT = "blocks-run/1"
+FORMAT = "blocks-run/2"
 
 
 def restore(v):
@@ -49,9 +54,11 @@ def headline_metrics(spec: dict) -> list[dict]:
 
 
 # ------------------------------------------------------------------ making a run file
-def record(spec: dict, results: dict, settings: dict, data: dict, source: str = "ui", made: str | None = None) -> dict:
-    """The run file of a run: `results` is Graph.run's {node: result}. It is `complete` when
-    every node is done; `ran` lists the nodes it computed (the rest came from the cache)."""
+def record(spec: dict, results: dict, settings: dict, data: dict, source: str = "ui", made: str | None = None,
+           code: dict | None = None) -> dict:
+    """The run file of a run: `results` is Graph.run's {node: result}, `code` the app's Python
+    files {path: source}. It is `complete` when every node is done; `ran` lists the nodes it
+    computed (the rest came from the cache)."""
     app = spec.get("app") or {}
     made = made or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")[:-4] + "Z"
     base = defaults(spec)
@@ -59,13 +66,15 @@ def record(spec: dict, results: dict, settings: dict, data: dict, source: str = 
     nodes = {}
     for n in spec["order"]:
         r = results.get(n) or {"status": "pending"}
-        nodes[n] = {"status": r["status"], "seconds": r.get("seconds"), "metrics": r.get("metrics") or {},
-                    "digest": r.get("digest"), "blocks": r.get("blocks") or [], "files": [f["name"] for f in r.get("files") or []],
+        nodes[n] = {"status": r["status"], "seconds": r.get("seconds"), "key": r.get("key"),
+                    "code": spec["nodes"][n].get("compute_sha"), "metrics": r.get("metrics") or {},
+                    "digest": r.get("digest"), **({"output": r["output"]} if r.get("output") is not None else {}),
+                    "blocks": r.get("blocks") or [], "files": [f["name"] for f in r.get("files") or []],
                     **({"error": r["error"]} if r.get("error") else {})}
     ran = [n for n in spec["order"] if nodes[n]["status"] == "done" and not (results.get(n) or {}).get("cached")]
     return {
         "format": FORMAT, "name": made[:19].replace(":", "-"), "app": app.get("id"), "project": app.get("project"),
-        "title": app.get("title"), "made": made, "code_sha": app.get("code_sha"),
+        "title": app.get("title"), "made": made, "code_sha": app.get("code_sha"), "code": code or {},
         "runtime": {**(app.get("runtime") or {}), "python": sys.version.split()[0]},
         "source": source, "ran": ran, "seconds": round(sum(nodes[n]["seconds"] or 0 for n in ran), 4),
         "complete": all(s["status"] == "done" for s in nodes.values()),
@@ -98,11 +107,26 @@ def _data_key(d: dict) -> str | None:
     return (d or {}).get("key") or (d or {}).get("sha256")
 
 
+def code_changes(run: dict, ref: dict) -> dict | None:
+    """Which nodes compute differently in two runs (by their code's hash), and which exist in
+    only one; None when the app's code is the same. A change of helpers, packages or the
+    recorded data changes code_sha without any node's own code: `nodes` is then empty."""
+    if run.get("code_sha") == ref.get("code_sha"):
+        return None
+    a, b = run.get("nodes") or {}, ref.get("nodes") or {}
+    return {"kind": "code", "from": ref.get("code_sha"), "to": run.get("code_sha"),
+            "nodes": [n for n in a if n in b and (a[n].get("code") != b[n].get("code"))],
+            "added": [n for n in a if n not in b], "removed": [n for n in b if n not in a]}
+
+
 def changes(run: dict, ref: dict) -> list[dict]:
-    """What differs between two runs' inputs: the app, settings, and data (by key)."""
+    """What differs between two runs' inputs: the app, its code, settings, and data (by key)."""
     out = []
     if run.get("app") != ref.get("app"):
         out.append({"kind": "app", "from": ref.get("app"), "to": run.get("app")})
+    code = code_changes(run, ref)
+    if code:
+        out.append(code)
     a, b = run.get("settings") or {}, ref.get("settings") or {}
     for k in sorted(set(a) | set(b)):
         if restore(a.get(k)) != restore(b.get(k)):
@@ -120,9 +144,10 @@ def compare(run: dict | None, ref: dict | None, spec: dict, tol: dict) -> dict:
     match        every metric of the reference's is within tolerance and the output digest is the same;
     differs      a metric or the digest is not;
     no-baseline  the reference has no result for the node;
-    error        the node did not run.
-    Also each metric's cell (the node's metrics, and each metrics block's items, by block id),
-    the headline's cells, and what changed between the runs' inputs."""
+    error        the node did not run;
+    missing      the reference has a result for a node this run does not have (a removed node).
+    Also each metric's cell (every metric either run has, and each metrics block's items, by
+    block id), the headline's cells, and what changed between the runs' inputs."""
     if not run:
         return {"verified": "error", "nodes": {}, "headline": {}, "changes": [], "reference": ref and ref.get("name")}
     goals = {n: {m["key"]: m.get("goal") for m in spec["nodes"][n]["metrics"]} for n in spec["nodes"]}
@@ -137,7 +162,7 @@ def compare(run: dict | None, ref: dict | None, spec: dict, tol: dict) -> dict:
             continue
         g = goals.get(n, {})
         mine, theirs = s.get("metrics") or {}, r.get("metrics") or {}
-        metrics = {k: cell(mine.get(k), theirs[k], g.get(k), tol) for k in theirs}
+        metrics = {k: cell(mine.get(k), theirs.get(k), g.get(k), tol) for k in dict.fromkeys([*theirs, *mine])}
         bad = [{"metric": k, "expected": c["ref"], "got": c["value"]} for k, c in metrics.items() if c["differs"]]
         if s.get("digest") != r.get("digest"):
             bad.append({"metric": "(output)", "expected": r.get("digest"), "got": s.get("digest")})
@@ -150,8 +175,12 @@ def compare(run: dict | None, ref: dict | None, spec: dict, tol: dict) -> dict:
                 blocks[b["id"]] = {it["key"]: cell(it.get("value"), rv[it["key"]], it.get("goal"), tol)
                                    for it in b.get("items") or [] if it["key"] in rv}
         nodes[n] = {"verdict": "differs" if bad else "match", "mismatches": bad, "metrics": metrics, "blocks": blocks}
+    for n, r in ((ref or {}).get("nodes") or {}).items():
+        if n not in nodes and r.get("status") == "done":
+            nodes[n] = {"verdict": "missing", "mismatches": [{"metric": "(node)", "expected": r.get("digest"), "got": None}],
+                        "metrics": {}, "blocks": {}}
     verdicts = [x["verdict"] for x in nodes.values()]
-    verified = ("error" if "error" in verdicts or not verdicts else "differs" if "differs" in verdicts
+    verified = ("error" if "error" in verdicts or not verdicts else "differs" if {"differs", "missing"} & set(verdicts)
                 else "no-baseline" if not ref or "no-baseline" in verdicts else "match")
     head = {m["id"]: cell((run.get("headline") or {}).get(m["id"]), ((ref or {}).get("headline") or {}).get(m["id"]), m.get("goal"), tol)
             for m in headline_metrics(spec)} if ref else {}
@@ -159,9 +188,22 @@ def compare(run: dict | None, ref: dict | None, spec: dict, tol: dict) -> dict:
             "reference": ref and ref.get("name")}
 
 
+def compare_many(run: dict | None, refs: list[dict], spec: dict, tol: dict) -> list[dict]:
+    """`run` against each of `refs`: what the page compares the active run with."""
+    return [compare(run, ref, spec, tol) for ref in refs]
+
+
+def brief(run: dict) -> dict:
+    """What `changes` and `summarize` read of a run, without its blocks, outputs and code."""
+    keep = ("name", "app", "code_sha", "settings", "data", "headline", "made")
+    return {**{k: run.get(k) for k in keep}, "nodes": {n: {"code": s.get("code"), "status": s.get("status")}
+                                                       for n, s in (run.get("nodes") or {}).items()}}
+
+
 def summarize(runs: list[dict], ref: dict | None, spec: dict, tol: dict) -> dict:
-    """Many runs against the reference, for a table of runs: each run's input changes and
-    headline cells, and per headline metric the runs best first (`order`) and the best."""
+    """Many runs against one (the active run), for a table of runs: each run's input changes
+    and headline cells, and per headline metric the runs best first (`order`) and the best.
+    The runs may be briefs (`brief`)."""
     rows, best, ranked = [], {}, {m["id"]: [] for m in headline_metrics(spec)}
     hm = headline_metrics(spec)
     for r in runs:

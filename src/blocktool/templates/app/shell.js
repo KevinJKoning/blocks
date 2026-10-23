@@ -29,7 +29,7 @@ function buildShell() {
   ui.graph.addEventListener("click", (ev) => { if (!ev.target.closest(".node, .pele-cluster-label")) select({ kind: "overview" }, false); });
   enablePan(ui.graph);
   ui.legend = h("div", { class: "legend", "aria-hidden": "true" },
-    [["○", "not run", "var(--muted)"], ["…", "running", "var(--run)"], ["✓", "done", "var(--ok)"], ["↻", "stale", "var(--warn)"],
+    [["○", "not run", "var(--muted)"], ["…", "running", "var(--run)"], ["✓", "done", "var(--ok)"], ["◆", "kept", "var(--accent)"], ["↻", "stale", "var(--warn)"],
       ["✕", "failed", "var(--err)"], ["–", "blocked", "var(--muted)"]]
       .map(([g, t, c]) => h("span", { cssvars: { "--c": c } }, h("b", {}, g), t)));
   ui.report = h("aside", { class: "report", "aria-label": "Report" });
@@ -142,9 +142,9 @@ function themePicker() {
       `${x.label} · ${m === "light" ? "Light" : "Dark"}`)))));
 }
 
-// ---- header: the app (its title opens the overview), Data, Settings, Run, Download (when a
-// node offers files), Run log (every run, and the one this run is compared with; when the
-// app has runs), and the report's show/hide switch. Nothing moves while the app loads.
+// ---- header: the app (its title opens the overview), Data, Settings, Run, Download (the
+// active run's files and run file), Run log (every run: the active one, those compared with
+// it; when the app has runs), and the report's show/hide switch. Nothing moves while the app loads.
 function runLabel() {
   if (state.fatal) return "Unavailable";
   if (!state.ready) return "Loading";
@@ -164,8 +164,8 @@ function buildHeader() {
   const open = (name) => h("button", { class: "cap", "data-action": `open-${name}`, onclick: () => openModal(name) }, modals[name].label);
   ui.dataBtn = manifest.datasets.length ? open("data") : null;
   ui.runBtn = h("button", { class: "cap primary", "data-action": "run", title: state.statusText || "", onclick: runClicked });
-  ui.downloadBtn = offering.length ? open("download") : null;
-  ui.runsBtn = RUNS ? h("button", { class: "cap runs-btn", "data-action": "runs", title: "Every run: compare with one, view one, apply, download its record",
+  ui.downloadBtn = open("download");
+  ui.runsBtn = RUNS ? h("button", { class: "cap runs-btn", "data-action": "runs", title: "Every run: make one active, compare others with it",
     onclick: () => { select({ kind: "runs" }); setReportShown(true); } }, "Run log") : null;
   ui.reportBtn = h("button", { class: "cap icon-only", "data-action": "toggle-report", "aria-label": "Report",
     "aria-pressed": String(state.reportShown), title: state.reportShown ? "Hide the report" : "Show the report",
@@ -184,10 +184,11 @@ function renderHeader() {
   ui.runBtn.textContent = runLabel();
   ui.runBtn.disabled = !canRun();
   // Every button keeps its place and label from the start; the run log's names the reference in its tooltip.
-  if (ui.downloadBtn) ui.downloadBtn.disabled = !offering.some((n) => state.node[n].status === "done");
+  if (ui.downloadBtn) ui.downloadBtn.disabled = !offering.some(filesReady) && !(activeDoc() && activeDoc().complete);
   if (ui.runsBtn) {
-    const ref = reference();
-    ui.runsBtn.title = `Every run: compare with one, view one, apply, download its record${ref ? `. Compared with: ${ref.name}` : ""}`;
+    const a = activeRun(), cs = comparedRuns();
+    ui.runsBtn.title = `Every run: make one active, compare others with it${a && a.name ? `. Active: ${a.name}` : ""}`
+      + `${cs.length ? `. Compared with: ${cs.map((r) => r.name).join(", ")}` : ""}`;
     ui.runsBtn.classList.toggle("on", state.sel.kind === "runs");
   }
   // Data asks for attention only when the viewer must act (a file to provide, or one that

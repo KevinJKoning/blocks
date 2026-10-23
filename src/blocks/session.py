@@ -31,16 +31,24 @@ class Session:
         self.spec = json.loads(spec_json)
         self.graph = graph_mod.Graph(self.root, self.spec)
         self._db = None
+        self.code = {}   # the app's Python, as every run file of this session keeps it
+        for rel in self.spec.get("code") or []:
+            with open(os.path.join(self.root, rel)) as f:
+                self.code[rel] = f.read()
 
     def run(self, settings_json, data_json, only_json="null", source="ui"):
         """Run what changed; data is {dataset: {key, original, file}} (blocks.runs). Returns
-        {nodes: {node: result}, record: the run file of the graph as it now stands}."""
+        {nodes: {node: result}, record: the run file of the graph as it now stands}. The
+        nodes' outputs are in the record only (where they are small enough to keep)."""
         settings, data, only = json.loads(settings_json), json.loads(data_json), json.loads(only_json)
         results = self.graph.run(settings, {n: d["key"] for n, d in data.items()}, set(only) if only else None)
-        return browser_json({"nodes": results, "record": runs.record(self.spec, results, settings, data, source)})
+        record = runs.record(self.spec, results, settings, data, source, code=self.code)
+        return browser_json({"nodes": {n: {k: v for k, v in r.items() if k != "output"} for n, r in results.items()},
+                             "record": record})
 
-    def compare(self, run_json, ref_json):
-        return browser_json(runs.compare(json.loads(run_json), json.loads(ref_json), self.spec, self.spec["verify"]))
+    def compare(self, run_json, refs_json):
+        """The run against each of the runs in refs (a list), in order."""
+        return browser_json(runs.compare_many(json.loads(run_json), json.loads(refs_json), self.spec, self.spec["verify"]))
 
     def summarize(self, runs_json, ref_json):
         return browser_json(runs.summarize(json.loads(runs_json), json.loads(ref_json), self.spec, self.spec["verify"]))

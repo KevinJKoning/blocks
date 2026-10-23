@@ -79,8 +79,8 @@
 
   const api = {
     view: {},
-    state: null,     // {nodes: {name: {status, cached, shown: run|viewed, compare, metrics}}, data: {name: {status, original, file, path, profile, schema}},
-                     //  reference, runs (previous runs loaded), settings, headline: [{id, label, goal, now, reference}], busy, ready}
+    state: null,     // {nodes: {name: {status, cached, readable, metrics}}, data: {name: {status, original, file, path, profile, schema}},
+                     //  active, compare, runs (every run's headline and settings), settings, headline: [{id, label, goal, now}], busy, ready}
     theme: null,
     init,            // resolves with the first state, once the host has connected
     on(event, fn) { if (handlers[event]) handlers[event].push(fn); return api; },

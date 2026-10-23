@@ -28,11 +28,11 @@ from pathlib import Path
 import yaml
 
 from . import plugins as plugin_mod
-from blocks import schema as table_schema
+from blocks import runs as table_runs, schema as table_schema
 
 BASELINE = "baseline.run.json"
 RUN_SUFFIX = ".run.json"
-RUN_FORMAT = "blocks-run/1"
+RUN_FORMAT = table_runs.FORMAT
 BOOKKEEPING = {"app.yaml", "runs.jsonl"}
 RESERVED_DIRS = ("plugins", "superseded", "data")
 DEFAULT_TOL = {"rel_tol": 1e-9, "abs_tol": 1e-12}
@@ -378,8 +378,20 @@ def read_views(app_plugins: dict, graph: dict, groups: dict, datasets: dict) -> 
 def read_run(path: Path) -> dict:
     doc = json.loads(path.read_text())
     if not isinstance(doc, dict) or doc.get("format") != RUN_FORMAT:
-        raise ValueError(f"{path.name} is not a {RUN_FORMAT} run file")
+        old = isinstance(doc, dict) and str(doc.get("format", "")).startswith("blocks-run/")
+        raise ValueError(f"{path.name} is not a {RUN_FORMAT} run file" + (f" ({doc['format']}: re-record it with `blocks baseline`)" if old else ""))
     return doc
+
+
+def read_baseline(path: Path) -> dict | None:
+    """The app's baseline; one of an older run format counts as none, so that `blocks baseline`
+    can record it again."""
+    if not path.is_file():
+        return None
+    try:
+        return read_run(path)
+    except ValueError:
+        return None
 
 
 def run_name(rel: str) -> str:
@@ -394,7 +406,12 @@ def read_shipped_runs(app_dir: Path, decl) -> dict[str, dict]:
         ok = "/" not in rel or (rel.startswith("superseded/") and rel.count("/") == 2)
         if not ok or not rel.endswith(RUN_SUFFIX) or not (app_dir / rel).is_file():
             raise ValueError(f"runs: {rel!r} must be a *{RUN_SUFFIX} file of the app or of superseded/<name>/")
-        out[run_name(rel)] = read_run(app_dir / rel)
+        if posixpath.basename(rel) == BASELINE:
+            doc = read_baseline(app_dir / rel)   # an older format: not shipped until `blocks baseline` records it again
+            if doc:
+                out[run_name(rel)] = doc
+        else:
+            out[run_name(rel)] = read_run(app_dir / rel)
     return out
 
 
@@ -478,7 +495,7 @@ def load_app(repo: Path, project: str, version: str | None = None) -> dict:
                  if graph["nodes"][n]["view"] or graph["nodes"][n]["downloads"]}
     ui_sha = sha256(json.dumps({"views": views, "node_files": view_srcs,
                                 "files": {p: sha256(b) for p, b in plugin_files.items()}}, sort_keys=True).encode())
-    baseline = read_run(adir / BASELINE) if (adir / BASELINE).is_file() else None
+    baseline = read_baseline(adir / BASELINE)
     return {
         "project": project, "version": version, "id": app_id, "dir": adir, "project_dir": project_dir,
         "title": cfg.get("title", project), "question": cfg.get("question", ""), "description": cfg.get("description", ""),

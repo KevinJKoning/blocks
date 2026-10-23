@@ -307,7 +307,8 @@ async function restoreData(name) {
 // The worker runs the graph: every node whose key (its code, settings and inputs) changed,
 // cached ones reported as such, and returns the run file of the graph as it now stands
 // (blocks.runs). Nothing runs until Run is pressed (or an agent runs): a change only makes
-// what it reaches stale. Run runs what is stale, or, when everything is current, everything.
+// what it reaches stale. Run runs what is stale, or, when everything is current, everything;
+// the run it makes becomes the active run.
 async function runGraph(source = "ui", rerunAll = false) {
   if (!state.ready || !dataReady()) return { ok: false, error: !state.ready ? "runtime not ready" : "datasets not loaded" };
   if (state.busy) return { ok: false, error: "already running" };
@@ -321,12 +322,14 @@ async function runGraph(source = "ui", rerunAll = false) {
   catch (e) { res = { nodes: Object.fromEntries(order.map((n) => [n, { status: "error", error: errorLine(e) }])), record: null }; }
   for (const n of order) state.node[n] = { ...res.nodes[n], data: Object.fromEntries(nodeData(n).map((d) => [d.name, dataStatus(d)])) };
   state.current = res.record;
-  state.busy = false;
   const failed = order.find((n) => state.node[n].status === "error") || null;
   const computed = res.record ? res.record.ran : [];
   let run = null;
   if (res.record && res.record.complete && computed.length) run = await keepRun(res.record);
+  state.active = activeAfterRun(run);
+  state.compare = state.compare.filter((x) => x !== state.active);
   await compareRuns();
+  state.busy = false;   // only now: the run is kept, active and compared, and the page shows it
   setStatus(progress());
   refresh();
   return { ok: !failed, failed, computed, run };
@@ -365,16 +368,22 @@ function dataRecord() {
   return Object.fromEntries(manifest.datasets.map((d) => { const x = state.data[d.name] || {};
     return [d.name, { key: x.key || null, original: !!x.original, ...(x.original ? {} : { file: x.file || null }) }]; }));
 }
-// Every node done and current: the run file records a complete run.
-const current = () => state.ready && !state.busy && !!state.current && order.every((n) => state.node[n].status === "done");
-const ran = (n) => state.node[n].status === "done" || state.node[n].status === "stale" && !!state.node[n].blocks;
+// The active run is complete, and every node's output of it is current in the worker: its
+// files can be made.
+const current = () => state.ready && !state.busy && !!activeDoc() && activeDoc().complete && order.every(live);
+// The active run's file (a complete run: a failed one is not a run file).
 function runFile(name) {
-  if (!current()) throw new Error("run the whole graph first: a run file records a complete, current run");
-  return name ? { ...state.current, name } : state.current;
+  const doc = activeDoc();
+  if (!doc || !doc.complete) throw new Error("run the whole graph first: a run file records a complete run");
+  return name ? { ...doc, name } : doc;
 }
-// A node's output, as JSON (views, agents): this session's; a previous run keeps blocks, not outputs.
+// A node's output in the active run, as JSON (views, agents): from the worker while it holds
+// it, else from the run file, which keeps outputs that are small.
+const readable = (n) => shown(n) && (held(n) || shownNode(n).output !== undefined);
 async function readOutput(name) {
   if (!(name in nodes)) throw new Error(`no node ${name}`);
-  if (!ran(name)) throw new Error(`${name} has not run yet`);
-  return call("output", { name });
+  if (!shown(name)) throw new Error(`${name} has not run yet`);
+  if (held(name)) return call("output", { name });
+  if (shownNode(name).output !== undefined) return shownNode(name).output;
+  throw new Error(`run ${activeRun().name} keeps ${name}'s output by its digest only (too large to keep): Run to compute it`);
 }

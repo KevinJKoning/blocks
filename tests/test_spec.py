@@ -110,12 +110,12 @@ def test_documentation_pages_are_blocks(repo):
     a = spec.load_app(repo, SENSOR)
     p = docs.pages(a)
     prepare = p["nodes"]["prepare"]
-    assert [b["type"] for b in prepare] == ["markdown", "settings", "results", "views", "fold"]   # read top to bottom
+    assert [b["type"] for b in prepare] == ["markdown", "settings", "results", "comparison", "views", "fold"]   # read top to bottom
     assert prepare[1]["keys"] == ["prepare.test_fraction", "prepare.seed", "prepare.outlier_z"]
     assert [b["type"] for b in prepare[-1]["blocks"]] == ["dataset", "links", "links", "code"]     # the reference, folded
-    assert [b["type"] for b in p["nodes"]["evaluate"]] == ["markdown", "results", "views", "fold"]  # no settings
+    assert [b["type"] for b in p["nodes"]["evaluate"]] == ["markdown", "results", "comparison", "views", "fold"]  # no settings
     assert [b["type"] for b in p["groups"]["Modelling"]] == ["markdown", "nodes", "views"]
-    assert [b["type"] for b in p["overview"]] == ["markdown", "markdown", "headline", "changes", "pick", "views",
+    assert [b["type"] for b in p["overview"]] == ["markdown", "markdown", "headline", "comparison", "pick", "views",
                                                    "runs-link", "markdown", "fold"]
     assert [b["type"] for b in p["runs"]] == ["runs"]
     assert [b["type"] for b in p["overview"][-1]["blocks"]] == ["dataset", "contents"]
@@ -140,8 +140,10 @@ def test_builds(repo):
 def test_verification_compares_metrics_and_digests(repo):
     a = spec.load_app(repo, SENSOR)
     base, G = a["baseline"], a["graph"]
-    assert base["format"] == "blocks-run/1" and base["app"] == SENSOR
-    assert [b["id"] for b in base["nodes"]["evaluate"]["blocks"]] == ["metrics", "markdown-2", "curve", "residuals"]
+    assert base["format"] == spec.RUN_FORMAT and base["app"] == SENSOR
+    assert [b["id"] for b in base["nodes"]["evaluate"]["blocks"]] == ["metrics", "markdown-1", "curve", "residuals"]
+    assert set(base["code"]) == {p for p in a["files"] if p.endswith(".py")}                 # a snapshot: the app's code
+    assert all(base["nodes"][n]["code"] == G["nodes"][n]["compute_sha"] and len(base["nodes"][n]["key"]) == 64 for n in G["order"])
     assert runs.compare(base, base, G, TOL)["verified"] == "match"
     run = copy.deepcopy(base)
     run["nodes"]["train"]["metrics"]["train_rmse"] += 1e-3
@@ -152,3 +154,6 @@ def test_verification_compares_metrics_and_digests(repo):
     assert runs.compare(run, base, G, TOL)["nodes"]["featurize"]["mismatches"] == [{"metric": "(output)", "expected": base["nodes"]["featurize"]["digest"], "got": "0" * 64}]
     assert runs.compare(None, base, G, TOL)["verified"] == "error"
     assert runs.compare(base, None, G, TOL)["verified"] == "no-baseline"
+    run = copy.deepcopy(base)
+    del run["nodes"]["calibrated"]                                       # a node removed since the baseline
+    assert runs.compare(run, base, G, TOL)["verified"] == "differs"

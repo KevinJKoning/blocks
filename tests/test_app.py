@@ -62,9 +62,9 @@ def test_a_change_waits_for_run(server, open_app):
     assert tool(page, "get_overview")["runs"] == 1                       # nothing ran by itself
     r = tool(page, "run")
     assert r["computed"] == ["prepare", "baseline", "featurize", "train", "evaluate", "calibrated"] and tool(page, "get_overview")["runs"] == 2
-    # every run is a run file, made by blocks.runs in the worker, and compared there with the reference
-    assert r["run"]["settings"] == {"prepare.outlier_z": 4} and tool(page, "get_overview")["changes"] == [
-        {"kind": "setting", "key": "prepare.outlier_z", "from": 3, "to": 4}]
+    # every run is a run file, made by blocks.runs in the worker, and compared there with the runs selected (the baseline)
+    assert r["run"]["settings"] == {"prepare.outlier_z": 4} and tool(page, "get_overview")["changes"] == {"baseline": [
+        {"kind": "setting", "key": "prepare.outlier_z", "from": 3, "to": 4}]}
 
 
 def test_explore_settings_and_log_runs(server, open_app, repo):
@@ -76,10 +76,10 @@ def test_explore_settings_and_log_runs(server, open_app, repo):
     runs = tool(page, "list_runs", {"sort_by": RMSE})
     best = runs["runs"][0]
     assert best["name"] == runs["best"][RMSE] and best["headline"][RMSE] == min(sw["best"][RMSE]["value"], best["headline"][RMSE])
-    applied = tool(page, "apply_run", {"name": best["name"], "run": True})
-    assert applied["ok"]
+    activated = tool(page, "activate_run", {"name": best["name"], "run": True})
+    assert activated["ok"] and activated["run"]["headline"][RMSE] == best["headline"][RMSE]   # the same run again
     logged = [json.loads(l) for l in (spec.app_dir(repo, SENSOR) / "runs.jsonl").read_text().splitlines()]
-    assert logged and all(r["format"] == "blocks-run/1" and r["complete"] for r in logged)   # the run log holds run files
+    assert logged and all(r["format"] == spec.RUN_FORMAT and r["complete"] for r in logged)   # the run log holds run files
     q = tool(page, "query_data", {"sql": "SELECT count(*) AS n FROM 'data/measurements.parquet'"})
     assert q["rows"] == [[400]]
     assert tool(page, "reset")["ok"] and tool(page, "get_overview")["at_defaults"]

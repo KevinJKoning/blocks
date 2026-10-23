@@ -20,10 +20,12 @@ documentation), and everything shown is a layer of blocks over their outputs.
   node, read top to bottom. The list is built with the page out of `blocks.ui`, where every
   block type is defined; some blocks are live (the settings as controls, a node's results,
   made by its view). One renderer draws every block.
-- **Runs are data, made and compared in one place** (`docs/runs.md`): a run file holds
-  settings, data keys, metrics, output digests and blocks; `blocks.runs` makes one after
-  every run and holds the one rule that compares two (a block of this run shows the
-  reference's block with the same node and id). The page and the tooling both use it.
+- **Runs are data, made and compared in one place** (`docs/runs.md`): a run file is a
+  snapshot: the app's code, settings, data keys, and per node its key, metrics, output
+  digest (the output too when small) and blocks; `blocks.runs` makes one after every run
+  and holds the one rule that compares runs. The page shows one run, the active one, as it
+  was; a comparison block puts the runs selected in the run log next to it. The page and
+  the tooling both use it.
 - **Downloads are separate from runs** (`docs/downloads.md`): a node's `downloads(out)`
   offers files made from its output (the data with results appended, a report), made in
   the worker only when downloaded, all of them zipped with the run file they come from.
@@ -70,7 +72,7 @@ src/blocktool/             the tooling: spec, docs, build, server, harvest, veri
 | `blocks/__init__.py`, `markers.py` | what a node imports: `Range`, `Choices`, `Note`, `ui` |
 | `blocks/ui.py` | every block type: the ones a view returns, and the page blocks `docs.py` lays pages out with; `ui.file` for downloads |
 | `blocks/graph.py` | the executor: loads nodes, keys, cache, runs, metrics, digests, views → blocks |
-| `blocks/runs.py` | run files: `record` one, `compare` two, `summarize` many against a reference |
+| `blocks/runs.py` | run files: `record` one, `compare` two (or one with several), `summarize` many against one |
 | `blocks/session.py` | what the worker calls: run (and its run file), compare runs, read an output, profile and validate data, DuckDB queries |
 | `blocks/schema.py` | table schemas: check a declaration (natively), validate data (in Pyodide) |
 | `blocktool/spec.py` | reads an app: nodes and the graph from signatures, settings, declarations, datasets, views, runs, `code_sha`, `ui_sha` |
@@ -79,21 +81,23 @@ src/blocktool/             the tooling: spec, docs, build, server, harvest, veri
 | `blocktool/server.py` | `blocks serve`: projects index, apps rebuilt per request, `/_runtime/`, `/_data/`, runs API |
 | `blocktool/harvest.py` | headless runs (baseline, regression, offline build), verified with `blocks.runs.compare` |
 | `blocktool/plugins.py`, `plugins/gdb-zip/` | plugins: formats and views |
-| `blocktool/templates/app/*.js` | the app script: `base` (model), `runtime` (worker, datasets, running), `runs` (the run list, reference, viewing a run), `downloads` (files and the zip), `shell` (layout, header), `dag`, `blocks` (renderer), `report` (which blocks), `render`, `views`, `modals`, `tools`, `boot` |
+| `blocktool/templates/app/*.js` | the app script: `base` (model), `runtime` (worker, datasets, running), `runs` (the run list, the active run, the runs compared with it), `downloads` (files and the zip), `shell` (layout, header), `dag`, `blocks` (renderer), `report` (which blocks), `render`, `views`, `modals`, `tools`, `boot` |
 | `blocktool/templates/worker.js` | the Pyodide worker: mounts with read-ahead, the session, ingest of formats |
 
 ## The page
 
 - **Header**: the title (opens the overview), Data (the datasets), Settings
   (Graph: every node's settings; App: theme, report, plugins, earlier versions, this
-  build), Run, Download (every node's files, or all as a zip), Run log (every run and the
-  reference; when the app has runs), the report's show/hide switch.
-- **DAG**: nodes in their groups, each with its state (`○ not run` from the start), the data
-  it reads (rows, size, schema check) and its declared metrics (values and Δ after a run).
+  build), Run, Download (every download: the active run's files, all as a zip, its run
+  file), Run log (every run: the active one and those compared with it; when the app has
+  runs), the report's show/hide switch.
+- **DAG**: nodes in their groups, each with its state in the active run (`○ not run` from
+  the start, `◆ kept` when it comes from a run file), the data it reads (rows, size, schema
+  check) and its declared metrics (the active run's values).
   A node selects that node, a group's label its group, the background the overview.
-- **Report**: crumb, title, the page's blocks (a node: docstring, settings, results, views,
-  then its data, links and code folded). The run log lists every run; viewing one shows
-  its results across the report under a banner.
+- **Report**: crumb, title, the page's blocks (a node: docstring, settings, results, its
+  comparison with the selected runs, views, then its data, links and code folded). The run
+  log lists every run; making one active shows it across the page as it was.
 
 ## Data flow of a run
 
@@ -102,9 +106,9 @@ src/blocktool/             the tooling: spec, docs, build, server, harvest, veri
    dataset converted first), profiling and checking each.
 2. Run sends the settings and the datasets' keys; `blocks.graph` walks the nodes in
    order, reusing every output whose key is unchanged and calling the rest with their
-   inputs' values and their settings, then makes each result: status, seconds, metrics,
-   digest, blocks (its view, filled in: metric labels, data profiles). `blocks.runs`
-   makes the run file.
+   inputs' values and their settings, then makes each result: status, seconds, key,
+   metrics, digest, the output if small, blocks (its view, filled in: metric labels, data
+   profiles). `blocks.runs` makes the run file, with the app's code.
 3. The page keeps a complete run that computed something (and posts it to the dev
-   server's run log unless the page was opened with `?harvest=1`), asks the worker to
-   compare it with the reference, and draws the results.
+   server's run log unless the page was opened with `?harvest=1`), makes it the active
+   run, asks the worker to compare it with the selected runs, and draws it.

@@ -76,5 +76,5 @@ stale; changing a computation does.
 
 An agent iterating on an app edits node files and calls the page's tools
 (`window.blocksApp.tools`, also WebMCP): `get_overview`, `get_node`, `set_settings`, `run`,
-`read_output`, `sweep`, `list_runs`, `export_run`, `add_run`, `set_reference`,
+`read_output`, `sweep`, `list_runs`, `activate_run`, `set_compare`, `export_run`, `add_run`,
 `check_data`, `query_data`, `get_report`.

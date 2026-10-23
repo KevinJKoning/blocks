@@ -128,7 +128,8 @@ def results(a: dict, res: dict, rt: Runtime) -> dict:
     nodes = {n: {"verdict": check["nodes"].get(n, {}).get("verdict", "error"),
                  "mismatches": check["nodes"].get(n, {}).get("mismatches", []),
                  "seconds": ((run.get("nodes") or {}).get(n) or {}).get("seconds"),
-                 "error": (res.get("node_errors") or {}).get(n)} for n in a["graph"]["order"]}
+                 "error": (res.get("node_errors") or {}).get(n)}
+             for n in [*a["graph"]["order"], *(m for m in check["nodes"] if m not in a["graph"]["order"])]}   # removed nodes too
     return {
         "app": a["id"], "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "code_sha": a["code_sha"],
         "verified": check["verified"], "headline": run.get("headline") or {}, "nodes": nodes,

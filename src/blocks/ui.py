@@ -15,8 +15,9 @@ state: a view does not return them.
             ui.data(out["table"], title="Held-out rows"),
         ]
 
-A block's id (by default its type and position) is how a previous run's version of the same
-block is found, to compare with.
+A block's id (by default its type and its place among the blocks of that type: chart-1,
+chart-2) is how another run's version of the same block is found, to compare with: give a
+block an id when its view may change.
 
 A node's downloads(out) returns files (ui.file): the durable artifacts of its output, made
 only when a viewer downloads them.
@@ -189,13 +190,15 @@ def nodes(names: list[str], title: str | None = "Nodes") -> dict:
 
 
 def headline(title: str | None = "Headline metrics") -> dict:
-    """The app's headline metrics: this run's, the reference's, Δ."""
+    """The app's headline metrics in the active run."""
     return _block("headline", title=title)
 
 
-def changes() -> dict:
-    """What differs between this run's inputs and the reference's."""
-    return _block("changes")
+def comparison(title: str | None = "Compared") -> dict:
+    """The active run against the runs selected in the run log: what changed in their inputs,
+    and the page's numbers side by side (the overview: headline metrics; a node: its output,
+    metrics and charts). Shown only on a page whose app has runs."""
+    return _block("comparison", title=title)
 
 
 def pick(node: str, block: str) -> dict:
@@ -204,13 +207,13 @@ def pick(node: str, block: str) -> dict:
 
 
 def runs(title: str | None = None) -> dict:
-    """Every run (the run log page): where it comes from, what differs from the reference, its
-    headline metrics, and what to do with it: compare with it, view it, apply, download, remove."""
+    """Every run (the run log page): where it comes from, what differs from the active run, its
+    headline metrics, and the two choices: which run is active, which are compared with it."""
     return _block("runs", title=title)
 
 
 def runs_link() -> dict:
-    """How many runs there are and which one is the reference, with a link to the run log."""
+    """How many runs there are, the active one and those compared with it, with a link to the run log."""
     return _block("runs-link")
 
 

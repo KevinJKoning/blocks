@@ -34,10 +34,12 @@ not outputs. A failing `downloads` is reported on the node's page, never fails t
 
 ## In the app (`app/downloads.js`)
 
-- The header's **Download** (when any node offers files) opens every node's files: each
-  one alone, or **Download all (.zip)**: every file and `run.json`, the run file of the
-  run they come from, so a download always carries its provenance.
+- The header's **Download** is the one place for downloads. It opens every node's files:
+  each one alone, or **Download all (.zip)**: every file and `run.json`, the run file of
+  the run they come from, so a download always carries its provenance; and the active
+  run's file alone (`run.json`) and this session's runs (`runs.json`).
 - A node's results list its files too.
-- Files come from this session's current results: a stale node's wait for Run, the zip
-  waits for a complete run, and viewing another run (`docs/runs.md`) does not change them.
+- Files come from the active run's results while the worker holds them, current: a stale
+  node's wait for Run, and so do a run's kept results (`docs/runs.md`: a run file keeps
+  results, not files). The zip waits for all of them.
 - Agents: `list_files`, `read_file({node, name})` (text back, or the size), `download_all`.

@@ -34,8 +34,9 @@ def downloads(out):                       # optional: files a viewer takes away
 - **The page is blocks**: the DAG is the table of contents; each node is one page, read top
   to bottom: its docstring, live settings, its results (its view), and its data, schema
   and code folded away.
-- **Runs are data**: export a run, load earlier ones (a superseded version's baseline), and
-  every block shows the reference's next to this run's.
+- **Runs are data**: every run is a snapshot (its code, settings, data keys and results);
+  make any run active to see it as it was, and compare it with any others (a superseded
+  version's baseline among them).
 - **Verified**: `blocks build` writes the app as one file and checks, offline, that every
   node reproduces the baseline.
 

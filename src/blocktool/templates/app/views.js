@@ -25,19 +25,19 @@ function viewDoc(name) {
     ["proto/view-bridge.js", ...v.code].map((p) => `<script>${textOf(p)}${END_SCRIPT}`).join("") + "</body></html>";
 }
 function viewSnapshot() {
-  // Per node: its status and metrics (shown: "run", or "viewed" while the viewer views
-  // another run's results; compare: the reference has results for it). Per dataset:
-  // its state, profile and schema check. reference and runs: the previous runs loaded.
-  const r = reference(), now = headlineNow();
-  return { nodes: Object.fromEntries(order.map((n) => [n, { status: state.node[n].status, cached: !!state.node[n].cached,
-      shown: shownSide(n), compare: comparable(n), metrics: (shownRecord(n) || {}).metrics || {} }])),
-    reference: r && r.name,
-    runs: loaded().map((x) => ({ name: x.name, app: x.doc.app, made: x.doc.made, headline: x.doc.headline || {}, settings: x.doc.settings || {} })),
+  // Per node, in the active run: its status (runs.js shownStatus), whether its output can be
+  // read, and its metrics. Per dataset: its state, profile and schema check. active and
+  // compare: the run shown and those compared with it; runs: every run's headline and settings.
+  const a = activeRun(), now = (activeDoc() || {}).headline || {};
+  return { nodes: Object.fromEntries(order.map((n) => [n, { status: shownStatus(n), cached: !!state.node[n].cached && live(n),
+      readable: readable(n), metrics: (shownNode(n) || {}).metrics || {} }])),
+    active: a && a.name, compare: comparedRuns().map((r) => r.name),
+    runs: state.runs.map((x) => ({ name: x.name, app: x.doc.app, made: x.doc.made, headline: x.doc.headline || {}, settings: x.doc.settings || {} })),
     data: Object.fromEntries(manifest.datasets.map((d) => { const x = state.data[d.name] || {};
       const c = x.check && x.check.status === "done" ? { ok: x.check.result.ok, problems: schemaProblems(x.check.result) } : x.check ? { status: x.check.status } : null;
       return [d.name, { status: x.status || "waiting", original: x.original ?? null, file: x.file || null, path: d.at, profile: x.profile || null, schema: c }]; })),
     settings: { ...state.settings }, busy: !!state.busy, ready: state.ready && dataReady(),
-    headline: headline.map((m) => ({ id: m.id, label: m.label, goal: m.goal, now: now[m.id], reference: r ? (r.doc.headline || {})[m.id] : undefined })) };
+    headline: headline.map((m) => ({ id: m.id, label: m.label, goal: m.goal, now: now[m.id] })) };
 }
 const integrityOk = () => !!state.integrity && !state.integrity.bad.length && !state.integrity.unavailable;
 function mountView(name) {
@@ -64,11 +64,11 @@ function mountView(name) {
   return f.wrap;
 }
 const viewSel = (v) => ({ kind: v.at.kind, name: v.at.target });
-// A view of nodes' outputs shows this session's: hidden while the report shows another run.
+// A view of nodes' outputs shows the active run's: those the worker holds, or the run file keeps.
 const viewHere = (v) => v.at.kind !== "data" && v.at.kind === state.sel.kind && (v.at.target || null) === (state.sel.name || null)
-  && (v.before_run || !viewed());
-// A result view has something to show once every node it reads has run.
-const viewCanShow = (v) => v.before_run || resultsAvailable(viewSel(v)) && v.reads.every((n) => ran(n));
+  && (v.before_run || v.reads.every(readable));
+// A result view has something to show once every node it reads has an output to read.
+const viewCanShow = (v) => v.before_run || resultsAvailable(viewSel(v)) && v.reads.every(readable);
 function showReportViews() {
   if (!ui.viewSlot) return;
   for (const [name, v] of Object.entries(views)) {

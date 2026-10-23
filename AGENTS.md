@@ -14,8 +14,9 @@ The loop: edit node files, then look at the page or call its tools (`blocks serv
 - `set_settings({values, run: true})`; `run()` recomputes only what changed (`computed` in
   the answer says what ran); `sweep({grid})` for a grid.
 - `get_node`, `read_output({node})`, `get_report` to see a result; `check_data`,
-  `query_data` for the data; `list_runs`, `set_reference`, `view_run`, `apply_run`,
-  `export_run`, `add_run` for runs (every run is a run file; `docs/runs.md`); `list_files`,
+  `query_data` for the data; `list_runs`, `activate_run` (show a run as it was, with its
+  settings), `set_compare` (runs to compare it with), `export_run`, `add_run` for runs
+  (every run is a run file: a snapshot with its code; `docs/runs.md`); `list_files`,
   `read_file` for downloads. Nothing runs
   until `run` (or `run: true`).
 

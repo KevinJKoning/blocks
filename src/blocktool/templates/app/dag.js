@@ -4,29 +4,25 @@
 // The graph is the report's table of contents: a node selects that node, a group's label
 // its group, the background the app's overview. Every node shows its state from the start
 // (○ not run), the data it reads (rows, size, the schema check) and the metrics its file
-// declares (headline ones first), without values until it has run, then with Δ from the
-// reference run. State is shown by the node's border, a light tint and a status line with
+// declares (headline ones first), without values until it has run, then the active run's
+// values (runs.js). State is shown by the node's border, a light tint and a status line with
 // a glyph (.dag [data-status] in app.css), never by colour alone.
-const GLYPH = { done: "✓", stale: "↻", running: "…", error: "✕", blocked: "–", pending: "○" };
-const NODE_STATUS = { done: "done", pending: "not run", stale: "stale", running: "running", error: "failed", blocked: "blocked" };
-const nodeStatus = (n) => `${GLYPH[state.node[n].status] || ""} ${NODE_STATUS[state.node[n].status] || state.node[n].status}`;
+const GLYPH = { done: "✓", kept: "◆", stale: "↻", running: "…", error: "✕", blocked: "–", pending: "○" };
+const NODE_STATUS = { done: "done", kept: "kept", pending: "not run", stale: "stale", running: "running", error: "failed", blocked: "blocked" };
+const nodeStatus = (n) => { const st = shownStatus(n); return `${GLYPH[st] || ""} ${NODE_STATUS[st] || st}`; };
 const STATUS_VARIANTS = Object.values(NODE_STATUS).map((t) => `✓ ${t}`);
 const lineReserve = new Map();
 const VALUE_RESERVE = "-0.00000";
 const METRIC_LINES = 3;
-// A node's declared metrics (headline ones first) and, after a run, their values with the
-// change from the reference run's.
+// A node's declared metrics (headline ones first) and, once it has run, the active run's values.
 function nodeMetrics(n) {
   const decl = declaredFor(n).sort((a, b) => b.headline - a.headline).slice(0, METRIC_LINES);
-  const now = ran(n) ? state.node[n].metrics || {} : null;
-  return decl.map((m) => {
-    const v = now ? now[m.key] : undefined, c = now ? metricCell(n, m.key) : null;
-    return [m, v, c && c.differs && c.delta !== null ? `(Δ ${signed(c.delta)})` : ""];
-  });
+  const now = shown(n) ? shownNode(n).metrics || {} : null;
+  return decl.map((m) => [m, now ? now[m.key] : undefined]);
 }
-function metricLine(m, v, suffix) {
-  const text = `${m.label} ${typeof v === "number" ? fmt(v) : "—"}${suffix ? ` ${suffix}` : ""}`;
-  lineReserve.set(text, [`${m.label} ${VALUE_RESERVE}`, `${m.label} ${VALUE_RESERVE} (Δ ${VALUE_RESERVE})`]);
+function metricLine(m, v) {
+  const text = `${m.label} ${typeof v === "number" ? fmt(v) : "—"}`;
+  lineReserve.set(text, [`${m.label} ${VALUE_RESERVE}`]);
   return text;
 }
 // The data a node reads: rows (or files) and size once loaded, then its schema check, each
@@ -44,13 +40,13 @@ function dataLines(n) {
   return [...lines, ...notes];
 }
 function stateLabel(n) {
-  const s = state.node[n], text = nodeStatus(n).slice(2);
-  if (s.status === "done") return `${text} · ${fmtSec(s.seconds)}`;
-  return s.status === "blocked" && s.error ? `blocked: ${s.error}` : text;
+  const st = shownStatus(n), r = shownNode(n), text = nodeStatus(n).slice(2);
+  if (st === "done" || st === "kept") return `${text} · ${fmtSec(r.seconds)}`;
+  return st === "blocked" && r.error ? `blocked: ${r.error}` : text;
 }
-const RANK = { error: 7, blocked: 6, running: 5, stale: 2, pending: 1, done: 0 };
+const RANK = { error: 7, blocked: 6, running: 5, stale: 2, pending: 1, kept: 0.5, done: 0 };
 function groupStatus(g) {
-  return groups[g].nodes.map((n) => state.node[n].status).reduce((w, s) => (RANK[s] > RANK[w] ? s : w), "done");
+  return groups[g].nodes.map(shownStatus).reduce((w, s) => (RANK[s] > RANK[w] ? s : w), "done");
 }
 // pele lays out and routes the graph from a Mermaid flowchart built from the nodes' inputs
 // (groups become subgraphs). Ids are synthetic (s0…, g0…).
@@ -63,7 +59,7 @@ function nodeLabel(n) {
   lineReserve.set(status, STATUS_VARIANTS);
   const lines = [`<b>${mermaidText(n)}</b>`, mermaidText(status)];
   for (const d of dataLines(n)) lines.push(mermaidText(d));
-  for (const [m, v, suffix] of nodeMetrics(n)) lines.push(mermaidText(metricLine(m, v, suffix)));
+  for (const [m, v] of nodeMetrics(n)) lines.push(mermaidText(metricLine(m, v)));
   return lines.join("<br/>");
 }
 function mermaidSource() {
@@ -141,7 +137,7 @@ function renderGraphPele() {
     g.querySelectorAll(".pele-label tspan").forEach((t, i) => { if (i === 1) t.classList.add("status"); if (i > 1) t.classList.add("metric"); });
     if (isSelected("node", n)) g.classList.add("selected");
     g.setAttribute("data-node", n);
-    g.setAttribute("data-status", state.node[n].status);
+    g.setAttribute("data-status", shownStatus(n));
     g.prepend(h("svg:title", {}, nodes[n].desc || n));
     activate(g, `Node ${n}: ${stateLabel(n)}`, () => select({ kind: "node", name: n }));
   }

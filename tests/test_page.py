@@ -1,6 +1,6 @@
 """The page in headless Chromium: the DAG as the report's contents, pages of blocks
-(a node's docstring, live settings, the results its view made, the reference folded), comparing
-runs, schema checks, the header, and an app's own sandboxed views."""
+(a node's docstring, live settings, the results its view made, the reference folded), the
+active run and comparing runs, schema checks, the header, and an app's own sandboxed views."""
 import hashlib
 import json
 import re
@@ -40,7 +40,7 @@ def test_before_a_run_the_app_describes_itself(server, open_app):
     page = open_app(app_url(server))
     assert open_modal(page) is None
     assert page.locator('[data-action="runs"]').inner_text() == "Run log"
-    assert page.locator('[data-action="runs"]').get_attribute("title").endswith("Compared with: baseline")
+    assert page.locator('[data-action="runs"]').get_attribute("title").endswith("Compared with: baseline")   # the shipped baseline
     assert page.locator('[data-action="auto"]').count() == 0                      # nothing runs until Run
     assert {page.locator(".dag .node").nth(i).get_attribute("data-status") for i in range(6)} == {"pending"}
     ev = node_text(page, "evaluate")
@@ -104,11 +104,11 @@ def test_results_are_each_nodes_blocks(server, open_app):
     assert "HEADLINE METRICS" in text and re.search(r"RMSE\s+0\.3565", text)
     assert page.locator('.report [data-block="pick"] [data-plot="curve"] svg.chart').count() == 1   # a block from evaluate's view
     tool(page, "select", {"node": "evaluate"})
-    assert block_ids(page) == ["metrics", "markdown-2", "curve", "residuals"]
+    assert block_ids(page) == ["metrics", "markdown-1", "curve", "residuals"]
     tool(page, "select", {"node": "prepare"})
-    assert block_ids(page) == ["metrics", "markdown-2", "screen", "train"]
+    assert block_ids(page) == ["metrics", "markdown-1", "screen", "train"]
     assert "290 rows · 2 columns" in page.locator(".report").inner_text()
-    assert page.locator(".report details.fold", has_text="Other metrics (2)").count() == 1   # n_missing, n_test: not declared
+    assert page.locator('.report [data-block="results"] details.fold', has_text="Other metrics (2)").count() == 1   # n_missing, n_test: not declared
     tool(page, "select", {"node": "featurize"})                # no view: its metrics
     assert block_ids(page) == ["metrics"]
 
@@ -116,42 +116,61 @@ def test_results_are_each_nodes_blocks(server, open_app):
 def test_runs_live_on_one_page(server, open_app, tmp_path):
     page = open_app(app_url(server))
     ov = tool(page, "get_overview")
-    assert [r["name"] for r in ov["previous_runs"]] == ["baseline"] and ov["reference"] == "baseline"
+    assert [r["name"] for r in ov["previous_runs"]] == ["baseline"] and ov["compare"] == ["baseline"] and ov["active"] is None
     assert tool(page, "set_settings", {"values": {"featurize.degree": 1}, "run": True})["ok"]
+    session = tool(page, "list_runs")["runs"][0]["name"]
     ev = tool(page, "get_node", {"name": "evaluate"})
-    assert ev["reference"] == "baseline" and ev["compare"] and ev["showing"] == "run" and ev["comparison"]["verdict"] == "differs"
+    assert ev["active"] == session and ev["status"] == "done"
+    assert [(c["run"], c["verdict"]) for c in ev["comparison"]] == [("baseline", "differs")]
+    # result blocks draw the active run alone; the comparison block puts the baseline next to it
     tool(page, "select", {"node": "evaluate"})
-    assert "featurize.degree 3 → 1" in page.locator(".report [data-changes]").inner_text()
-    assert page.locator('.report [data-plot="curve"] svg.chart .base').count() > 0
-    assert page.locator(".report table.metrics th").all_inner_texts()[2:] == ["baseline", "Δ"]
-    assert "Δ" in node_text(page, "evaluate")
+    results, cmp = page.locator('.report [data-block="results"]'), page.locator('.report [data-block="comparison"]')
+    assert results.locator("svg.chart .base").count() == 0 and results.locator("table.metrics th").all_inner_texts() == ["metric", "value"]
+    assert "featurize.degree 3 → 1" in cmp.locator('[data-changes="baseline"]').inner_text()
+    assert cmp.locator('[data-compare-chart="curve"] svg.chart .base').count() > 0
+    assert cmp.locator("table.metrics").first.locator("th").all_inner_texts() == ["metric", session, "baseline", "Δ"]
+    assert "Δ" not in node_text(page, "evaluate")
     # the run log: this session's run and the baseline, in one table
     page.click('[data-action="runs"]')
     assert tool(page, "get_report")["selected"] == {"kind": "runs", "name": None}
     names = page.evaluate("[...document.querySelectorAll('.report [data-run]')].map((r) => r.dataset.run)")
-    session = tool(page, "list_runs")["runs"][0]["name"]
     assert names == [session, "baseline"]
-    assert "featurize.degree 3 → 1" in page.locator(f'.report [data-run="{session}"]').inner_text()
-    # view the baseline's results: the whole report shows them until going back
-    page.click('.report [data-run="baseline"] [data-action="view-run"]')
-    assert page.locator(".report [data-viewing]").count() == 1
+    assert "featurize.degree 1 → 3" in page.locator('.report [data-run="baseline"]').inner_text()   # from the active run
+    assert page.locator('.report [data-run] [data-action="view-run"], .report [data-run] [data-action="apply-run"]').count() == 0
+    # make the baseline active: its settings, and its results as they were, kept in its run file
+    page.click('.report [data-run="baseline"] [data-action="activate-run"]')
+    page.wait_for_function("() => window.blocksApp.state.active === 'baseline' && !window.blocksApp.state.busy")
+    assert tool(page, "get_overview")["settings"]["featurize.degree"]["value"] == 3
+    ev = tool(page, "get_node", {"name": "evaluate"})
+    assert ev["status"] == "kept" and ev["output_readable"] and ev["comparison"] == []   # it is no longer compared with itself
+    assert page.locator('.dag .node[data-node="evaluate"]').get_attribute("data-status") == "kept"
     tool(page, "select", {"node": "evaluate"})
-    assert block_ids(page) == ["metrics", "markdown-2", "curve", "residuals"]
-    assert page.locator(".report table.metrics th").all_inner_texts()[1:] == ["baseline"]   # its values, no Δ
-    page.click('[data-action="back-to-run"]')
-    assert tool(page, "get_report")["viewing"] is None
-    # a run file loaded in the run log becomes the reference when picked
+    assert block_ids(page) == ["metrics", "markdown-1", "curve", "residuals"]
+    assert page.locator('.report [data-active="baseline"]').count() == 1 and page.locator(".report [data-kept]").count() == 1
+    assert "baseline" in page.locator('[data-action="runs"]').get_attribute("title")
+    # Run computes it again: the same results, now current
+    r = tool(page, "run")
+    assert r["ok"] and r["active"] != "baseline"
+    assert tool(page, "get_node", {"name": "evaluate"})["status"] == "done"
+    # compare with more than one run
+    out = tool(page, "set_compare", {"names": ["baseline", session]})
+    assert out["compare"] == ["baseline", session] and out["changes"]["baseline"] == []      # same settings, data and code
+    ev = tool(page, "get_node", {"name": "evaluate"})
+    assert [(c["run"], c["verdict"]) for c in ev["comparison"]] == [("baseline", "match"), (session, "differs")]
+    tool(page, "select", {"node": "evaluate"})
+    assert page.locator('.report [data-block="comparison"] table.metrics').first.locator("th").all_inner_texts() == [
+        "metric", r["active"], "baseline", "Δ", session, "Δ"]
+    # a run file loaded in the run log can be compared with
     exported = tool(page, "export_run")["run"]
-    f = tmp_path / "degree one.run.json"
+    assert exported["code"] and exported["nodes"]["evaluate"]["key"]
+    f = tmp_path / "degree three.run.json"
     f.write_text(json.dumps(exported))
     tool(page, "select", {"runs": True})
     page.set_input_files('input[type=file][aria-label="Run files"]', str(f))
-    page.wait_for_selector('.report [data-run="degree one"]')
-    page.click('.report [data-run="degree one"] input[type=radio]')
-    page.wait_for_function("() => document.querySelector('[data-action=runs]').title.endsWith('Compared with: degree one')")
-    assert tool(page, "set_settings", {"values": {"featurize.degree": 3}, "run": True})["ok"]
-    tool(page, "select", {"node": "evaluate"})
-    assert "featurize.degree 1 → 3" in page.locator(".report [data-changes]").inner_text()
+    page.wait_for_selector('.report [data-run="degree three"]')
+    page.click('.report [data-run="degree three"] [data-action="compare-run"]')
+    page.wait_for_function("() => document.querySelector('[data-action=runs]').title.endsWith('Compared with: baseline, ' + "
+                           f"{json.dumps(session)} + ', degree three')")
     other = dict(exported, project="elsewhere")
     assert "project" in page.evaluate("(r) => Promise.resolve().then(() => window.blocksApp.tools.add_run({name: 'x', run: r})).then(() => 'added', (e) => e.message)", other)
 
@@ -184,12 +203,12 @@ def test_the_header_report_and_settings(server, open_app):
     assert dlg.locator('select[aria-label="Theme"]').count() == 1 and dlg.locator("[data-plugin]").count() == 1
     page.click('dialog[data-modal="settings"] [data-action="done"]')
     assert tool(page, "run")["ok"]
-    page.click('[data-action="runs"]')
-    session = tool(page, "list_runs")["runs"][0]["name"]
+    page.click('[data-action="open-download"]')                  # every download is the header's: the active run's file too
     with page.expect_download() as dl:
-        page.click(f'.report [data-run="{session}"] [data-action="download-run"]')
+        page.click('dialog[data-modal="download"] [data-action="download-run"]')
+    page.click('dialog[data-modal="download"] [data-action="done"]')
     run = json.loads(open(dl.value.path()).read())
-    assert run["format"] == "blocks-run/1" and set(run["nodes"]) == {"prepare", "baseline", "featurize", "train", "evaluate", "calibrated"}
+    assert run["format"] == "blocks-run/2" and set(run["nodes"]) == {"prepare", "baseline", "featurize", "train", "evaluate", "calibrated"}
     assert run["nodes"]["evaluate"]["digest"] and "verified" not in run
 
 
@@ -199,7 +218,7 @@ def test_download_makes_the_runs_files(server, open_app):
     assert tool(page, "run")["ok"]
     page.click('[data-action="open-download"]')
     dlg = page.locator('dialog[data-modal="download"]')
-    assert dlg.locator("[data-download-node]").get_attribute("data-download-node") == "calibrated"
+    assert dlg.locator("[data-download-node]").evaluate_all("(xs) => xs.map((x) => x.dataset.downloadNode)") == ["calibrated", "run"]
     with page.expect_download() as dl:
         dlg.locator('[data-file="calibrated.csv"]').click()
     lines = open(dl.value.path()).read().splitlines()
@@ -226,10 +245,11 @@ def test_an_app_without_runs(repo, server, open_app):
     page = open_app(app_url(server, harvest_run=False))
     assert page.locator('[data-action="runs"]').count() == 0 and page.locator(".report [data-runs-link]").count() == 0
     names = page.evaluate("Object.keys(window.blocksApp.tools)")
-    assert "list_runs" not in names and "view_run" not in names and "read_file" in names
+    assert "list_runs" not in names and "activate_run" not in names and "read_file" in names
     r = tool(page, "run")
     assert r["ok"] and r["run"]["name"]                       # every run still has its record (run.json in the zip)
-    assert page.evaluate("window.blocksApp.state.runs.length") == 0 and tool(page, "get_overview")["reference"] is None
+    assert page.evaluate("window.blocksApp.state.runs.length") == 0 and tool(page, "get_overview")["compare"] == []
+    assert page.locator('.report [data-block="comparison"]').count() == 0
     assert "Δ" not in node_text(page, "evaluate")
     assert not page.locator('[data-action="open-download"]').is_disabled()
 

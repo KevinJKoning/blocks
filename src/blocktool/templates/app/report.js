@@ -7,7 +7,7 @@
 // The report is head | blocks before the views | view slot | blocks after, and the view
 // slot is never rebuilt: view frames live in it, because moving an iframe reloads it.
 
-const isRun = (n) => state.node[n].status !== "pending";
+const isRun = (n) => shownStatus(n) !== "pending";
 function resultsAvailable(sel) {
   if (sel.kind === "overview") return !!state.hasRun;
   if (sel.kind === "group") return groups[sel.name].nodes.some(isRun);
@@ -24,7 +24,7 @@ function renderReport() {
     ui.report.append(ui.reportHead, ui.reportBody, ui.viewSlot, ui.reportTail);
   }
   const sel = state.sel, list = pageOf(sel), at = list.findIndex((b) => b.type === "views");
-  const ctx = sel.kind === "node" ? { node: sel.name, side: shownSide(sel.name) } : {};
+  const ctx = sel.kind === "node" ? { node: sel.name } : {};
   // A setting changed here re-renders the page: keep its focus.
   const active = ui.report.contains(document.activeElement) && document.activeElement.closest("[data-param]");
   const focus = active && { key: active.dataset.param, type: document.activeElement.type };
@@ -45,39 +45,42 @@ function renderReport() {
 }
 function reportHead(sel) {
   const title = sel.kind === "overview" ? manifest.title : sel.kind === "runs" ? "Run log" : sel.name;
-  const status = sel.kind === "node" ? h("span", { class: `pill ${state.node[sel.name].status}` }, stateLabel(sel.name))
+  const status = sel.kind === "node" ? h("span", { class: `pill ${shownStatus(sel.name)}` }, stateLabel(sel.name))
     : sel.kind === "group" ? h("span", { class: `pill ${groupStatus(sel.name)}` }, NODE_STATUS[groupStatus(sel.name)]) : null;
-  const v = viewed();
   return h("div", {},
     h("div", { class: "crumb small muted" }, sel.kind === "overview" ? "Overview" : [h("button", { class: "btn link", onclick: () => select({ kind: "overview" }) }, manifest.title), " / ",
       sel.kind === "node" && groupOf[sel.name] ? [groupLink(groupOf[sel.name]), " / "] : null, { group: "Group", node: "Node", runs: "Run log" }[sel.kind]]),
-    h("h2", {}, title, status),
-    v ? h("div", { class: "viewing", "data-viewing": v.name }, h("span", {}, "Viewing run ", h("strong", { class: "mono" }, runLabel_(v)),
-      h("span", { class: "muted" }, ": its results, not this session's.")),
-      h("button", { class: "btn", "data-action": "back-to-run", onclick: () => viewRun(null) }, "Back to this run")) : null);
+    h("h2", {}, title, status), activeLine());
 }
-// A node's results: its run state, then the blocks its view made (this session's, or the
-// viewed run's), the files its downloads(out) offers, then its log.
+// When the active run's results are not all current in the worker: which run the page shows,
+// and whether it was made by other code.
+function activeLine() {
+  const a = activeRun();
+  if (!a || !a.name || order.every((n) => ["done", "pending", "running"].includes(shownStatus(n)))) return null;
+  const other = order.filter(otherCode);
+  return h("div", { class: "active-run", "data-active": a.name }, h("span", {}, "Showing run ", h("strong", { class: "mono" }, runLabel_(a)),
+    h("span", { class: "muted" }, other.length ? `, made by other code (${other.join(", ")}): Run computes it with the code as it is now.`
+      : ": kept results are its run file's; Run computes them again.")));
+}
+// A node's results in the active run: their state, then the blocks its view made, the files
+// its downloads(out) offers, then its log.
 function nodeResults(n, ctx) {
-  const s = state.node[n];
-  if (viewed()) {
-    const rec = shownRecord(n);
-    return rec ? renderBlocks(rec.blocks || [], ctx) : h("p", { class: "small muted" }, `Run ${viewed().name} has no results for ${n}.`);
-  }
-  if (!ran(n) && s.status !== "error" && s.status !== "blocked")
-    return h("p", { class: "small muted", "data-not-run": "" }, s.status === "running" ? "Running…" : "Not run yet: Run computes it, and what it reads.");
-  const rec = shownRecord(n), files = nodes[n].downloads && ran(n) ? fileLinks(n) : null;
-  return [runHeader(n), ran(n) ? renderBlocks(rec ? rec.blocks || [] : [], ctx) : null,
+  const st = shownStatus(n), r = shownNode(n), s = state.node[n];
+  if (!shown(n) && !["error", "blocked"].includes((r || {}).status))
+    return h("p", { class: "small muted", "data-not-run": "" }, st === "running" ? "Running…" : "Not run yet: Run computes it, and what it reads.");
+  const files = nodes[n].downloads && shown(n) ? fileLinks(n) : null;
+  return [runHeader(n), shown(n) ? renderBlocks(r.blocks || [], ctx) : null,
     files ? h("section", { class: "block block-files" }, h("h3", {}, "Files"), files) : null,
-    s.log ? h("details", { class: "fold" }, h("summary", {}, "Log"), h("pre", { class: "log" }, s.log)) : null];
+    held(n) && s.log ? h("details", { class: "fold" }, h("summary", {}, "Log"), h("pre", { class: "log" }, s.log)) : null];
 }
-// A node's run state, and the run it is compared with.
+// A node's state in the active run.
 function runHeader(n) {
-  const s = state.node[n], out = [];
-  if (s.status === "stale") out.push(h("p", { class: "small muted" }, "A setting or input of this node changed; its results are from before."));
-  if (s.status === "error") out.push(h("div", { class: "card err" }, h("strong", {}, "Node failed"), h("pre", { class: "log" }, s.error)));
-  if (s.status === "blocked") out.push(h("p", { class: "small muted" }, `Not run: ${s.error}.`));
-  if (s.cached && s.status === "done") out.push(h("p", { class: "small muted", "data-cached": "" }, "From the cache: nothing it depends on changed since it last ran."));
-  if (comparable(n)) out.push(changesLine(reference()), h("p", { class: "small muted" }, `Δ and dashed series: ${reference().name}.`));
+  const st = shownStatus(n), r = shownNode(n) || {}, s = state.node[n], a = activeRun(), out = [];
+  if (st === "stale") out.push(h("p", { class: "small muted" }, "A setting or input of this node changed; its results are from before."));
+  if (st === "kept") out.push(h("p", { class: "small muted", "data-kept": "" }, `Kept in run ${runLabel_(a)}`,
+    otherCode(n) ? ", made by other code" : "", ": Run computes it again."));
+  if (r.status === "error") out.push(h("div", { class: "card err" }, h("strong", {}, "Node failed"), h("pre", { class: "log" }, r.error)));
+  if (r.status === "blocked") out.push(h("p", { class: "small muted" }, `Not run: ${r.error}.`));
+  if (s.cached && st === "done") out.push(h("p", { class: "small muted", "data-cached": "" }, "From the cache: nothing it depends on changed since it last ran."));
   return out;
 }
