@@ -1,0 +1,15 @@
+title: Titanic survival
+question: >-
+  How well can passenger characteristics predict survival on the Titanic?
+description: >-
+  A starting project for exploring the Titanic passenger data and comparing survival models.
+packages: [pyarrow]
+data:
+  passengers:
+    path: data/titanic.csv
+    desc: Titanic training dataset with passenger characteristics and known survival outcomes.
+docs: [README.md]
+overview:
+  - {node: ingest, block: metrics}
+  - {node: ingest, block: preview}
+  - {node: ingest, block: missing}

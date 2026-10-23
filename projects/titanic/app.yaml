@@ -1,0 +1,21 @@
+title: Titanic survival
+question: >-
+  How does survival vary across passengers, and which associations remain after adjusting for sex, class, and age?
+description: >-
+  Three analyses of the binary survival outcome: overall survival, group comparisons,
+  and a logistic regression adjusting for sex, passenger class, and age.
+packages: [pyarrow, numpy, statsmodels]
+data:
+  passengers:
+    path: data/titanic.csv
+    desc: Titanic training dataset with passenger characteristics and known survival outcomes.
+docs: [README.md]
+overview:
+  - {node: overall, block: answer}
+  - {node: overall, block: interval}
+  - {node: group_rates, block: sex}
+  - {node: logistic, block: sample}
+  - {node: logistic, block: effects}
+  - {node: logistic, block: interpretation}
+  - {node: logistic, block: limitations}
+runs: [superseded/ingestion-only/baseline.run.json]
