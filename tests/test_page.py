@@ -1,5 +1,5 @@
 """The page in headless Chromium: the DAG as the report's contents, pages of blocks
-(Documentation from the node's file with live settings, Results from its view), comparing
+(a node's docstring, live settings, the results its view made, the reference folded), comparing
 runs, schema checks, the header, and an app's own sandboxed views."""
 import hashlib
 import json
@@ -27,7 +27,12 @@ def node_text(page, n):
 
 
 def block_ids(page):
-    return page.evaluate("[...document.querySelectorAll('.report [data-block]')].map((b) => b.dataset.id || b.dataset.block)")
+    return page.evaluate("[...document.querySelectorAll('.report [data-block=results] [data-block]')].map((b) => b.dataset.id || b.dataset.block)")
+
+
+def page_blocks(page):
+    return page.evaluate("[...document.querySelectorAll('.report [data-block]')].filter((b) => !b.parentElement.closest('[data-block]'))"
+                         ".map((b) => b.dataset.block)")
 
 
 def test_before_a_run_the_app_describes_itself(server, open_app):
@@ -41,23 +46,32 @@ def test_before_a_run_the_app_describes_itself(server, open_app):
     page.wait_for_function("() => /400 rows/.test(document.querySelector('.dag .node[data-node=prepare]').textContent)")
     page.wait_for_function("() => /matches its schema/.test(document.querySelector('.dag .node[data-node=prepare]').textContent)")
     assert tool(page, "get_report")["selected"] == {"kind": "overview", "name": None}
-    assert page.locator("#tab-results").is_disabled()
+    assert page.locator(".report [role=tab]").count() == 0                       # one page, no tabs
     text = page.locator(".report").inner_text()
-    assert "Which calibration curve" in text and "HEADLINE METRICS" in text and "CONTENTS" in text
+    assert "Which calibration curve" in text and "HEADLINE METRICS" in text and "No runs yet" in text
+    assert "ABOUT THIS APP" in text and "CONTENTS" not in text                   # folded until opened
+    page.click('.report [data-fold="about-app"] > summary')
+    assert "CONTENTS" in page.locator(".report").inner_text()
     assert page.locator(".report input, .report select").count() == 0     # the overview changes nothing
 
 
 def test_a_nodes_documentation_comes_from_its_file(server, open_app):
     page = open_app(app_url(server))
     page.click('.dag .node[data-node="prepare"]')
+    assert page_blocks(page) == ["markdown", "settings", "results", "fold"]
+    assert "Not run yet" in page.locator('.report [data-block="results"]').inner_text()
+    page.click('.report [data-fold="about-node"] > summary')                    # the reference material
     page.wait_for_selector('.report [data-schema="measurements"] .pill.done')
     text = page.locator(".report").inner_text()
     assert "Connector spikes are screened against a robust" in text        # the docstring
-    assert "400 rows · 2 columns" in text and "minimum 0, maximum 12" in text and "rows read" in text
+    assert "400 rows · 2 columns" in text and "minimum 0, maximum 12" in text
+    assert "METRICS IT REPORTS" not in text                                  # its results label them
     assert page.locator('.report [data-param="prepare.outlier_z"] input[type=range]').count() == 1   # live settings
     assert "SCHEMA = {" in page.locator(".report details.fold pre.src").text_content()            # the code
     v = tool(page, "open_view", {"name": "preview"})
     assert v["settled"] and v["describe"] == {"rows": 400, "missing": 8, "plotted": 392}
+    page.click('.dag .node[data-node="train"]')
+    assert page.locator('.report [data-fold="about-node"]').get_attribute("open") is not None   # stays open
     # a group's label selects the group: its documentation and its nodes
     page.click('[data-group="Modelling"] .pele-cluster-label')
     page.wait_for_function("() => window.blocksApp.state.sel.kind === 'group'")
@@ -67,29 +81,31 @@ def test_a_nodes_documentation_comes_from_its_file(server, open_app):
 def test_a_setting_in_the_report_runs_what_it_reaches(server, open_app):
     page = open_app(app_url(server))
     assert tool(page, "run")["ok"]
-    tool(page, "select", {"node": "train", "tab": "documentation"})
+    tool(page, "select", {"node": "train"})
     page.fill('.report [data-param="train.alpha"] input[type=number]', "1")
     page.press('.report [data-param="train.alpha"] input[type=number]', "Enter")
     page.wait_for_function("() => window.blocksApp.state.runs.length === 2 && !window.blocksApp.state.busy")
     assert page.evaluate("window.blocksApp.state.runs[1].ran") == ["train", "evaluate"]
     assert "train RMSE 0.3798" in node_text(page, "train")
+    # the setting and what it changed are on one page, and the control keeps its focus
+    assert re.search(r"train RMSE\s+0\.3798", page.locator('.report [data-block="results"]').inner_text())
+    assert page.evaluate("document.activeElement.closest('[data-param]')?.dataset.param") == "train.alpha"
 
 
 def test_results_are_each_nodes_blocks(server, open_app):
     page = open_app(app_url(server, harvest_run=False))
     page.click('[data-action="run"]')
     page.wait_for_function("() => window.blocksApp.state.runs.length === 1 && !window.blocksApp.state.busy")
-    assert page.locator("#tab-results").get_attribute("aria-selected") == "true"
     text = page.locator(".report").inner_text()
     assert "HEADLINE METRICS" in text and re.search(r"RMSE\s+0\.3565", text)
     assert page.locator('.report [data-block="pick"] [data-plot="curve"] svg.chart').count() == 1   # a block from evaluate's view
-    tool(page, "select", {"node": "evaluate", "tab": "results"})
+    tool(page, "select", {"node": "evaluate"})
     assert block_ids(page) == ["metrics", "markdown-2", "curve", "residuals"]
-    tool(page, "select", {"node": "prepare", "tab": "results"})
+    tool(page, "select", {"node": "prepare"})
     assert block_ids(page) == ["metrics", "markdown-2", "screen", "train"]
     assert "290 rows · 2 columns" in page.locator(".report").inner_text()
     assert page.locator(".report details.fold", has_text="Other metrics (2)").count() == 1   # n_missing, n_test: not declared
-    tool(page, "select", {"node": "featurize", "tab": "results"})                # no view: its metrics
+    tool(page, "select", {"node": "featurize"})                # no view: its metrics
     assert block_ids(page) == ["metrics"]
 
 
@@ -100,7 +116,7 @@ def test_previous_runs_are_data_compared_after_a_run(server, open_app, tmp_path)
     assert tool(page, "set_settings", {"values": {"featurize.degree": 1}, "run": True})["ok"]
     ev = tool(page, "get_node", {"name": "evaluate"})
     assert ev["reference"] == "baseline" and ev["compare"] and ev["showing"] == "run"
-    tool(page, "select", {"node": "evaluate", "tab": "results"})
+    tool(page, "select", {"node": "evaluate"})
     assert "featurize.degree 3 → 1" in page.locator(".report [data-changes]").inner_text()
     assert page.locator('.report [data-plot="curve"] svg.chart .base').count() > 0
     assert page.locator(".report table.metrics th").all_inner_texts()[2:] == ["baseline", "Δ"]
@@ -116,7 +132,7 @@ def test_previous_runs_are_data_compared_after_a_run(server, open_app, tmp_path)
     page.click('dialog[data-modal="data"] [data-action="done"]')
     assert tool(page, "set_reference", {"name": "degree one"})["reference"] == "degree one"
     assert tool(page, "set_settings", {"values": {"featurize.degree": 3}, "run": True})["ok"]
-    tool(page, "select", {"node": "evaluate", "tab": "results"})
+    tool(page, "select", {"node": "evaluate"})
     page.click('[data-action="show-run"]')
     assert "featurize.degree 1 → 3" in page.locator(".report [data-changes]").inner_text()
     other = dict(exported, project="elsewhere")

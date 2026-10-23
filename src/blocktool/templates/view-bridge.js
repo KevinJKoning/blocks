@@ -88,7 +88,7 @@
     // settles when their drawing is done.
     ready(summary) { send({ type: "ready", seq: initSeq, summary: summary === undefined ? null : summary }); },
     describe(value) { send({ type: "describe", value }); },
-    // read(name): a node's output as JSON (Results views), or a dataset's bytes (views shown
+    // read(name): a node's output as JSON (views of results), or a dataset's bytes (views shown
     // before a run, which mostly query instead). Only what the view `reads`.
     read: (name) => request("read", { name }),
     settings: () => request("settings"),

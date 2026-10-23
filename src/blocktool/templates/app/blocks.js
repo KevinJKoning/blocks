@@ -1,10 +1,10 @@
 // blocks.js: every report page is a list of blocks, drawn here (docs/blocks.md).
 //
-// A node's Results are the blocks its view(out) made of its output (blocks.ui), or default
-// ones; Documentation blocks come with the page (blocktool/docs.py) and some are live:
-// a dataset's state and check, the settings as controls. A block of a node's Results also
-// shows the reference run's block with the same node and id, where that means something:
-// metrics add its values and Δ, charts draw its series dashed underneath.
+// A page's blocks come with it (blocktool/docs.py), and some are live: a dataset's state
+// and check, the settings as controls, and a node's results, which are the blocks its
+// view(out) made of its output (blocks.ui). A block of a node's results also shows the
+// reference run's block with the same node and id, where that means something: metrics
+// add its values and Δ, charts draw its series dashed underneath.
 
 // ctx: {node, side}: the node the blocks belong to, and which run they come from.
 function renderBlocks(list, ctx = {}) {
@@ -14,7 +14,7 @@ function renderBlocks(list, ctx = {}) {
     try { body = draw ? draw(b, ctx) : h("p", { class: "small muted" }, `(a ${b.type} block, which this page does not draw)`); }
     catch (e) { body = h("p", { class: "small problem" }, `${b.type} block: ${e.message}`); console.error(e); }
     return body === null ? null : h("section", { class: `block block-${b.type}`, "data-block": b.type, "data-id": b.id || null },
-      b.title ? h("h3", {}, b.title) : null, body);
+      b.title && b.type !== "fold" ? h("h3", {}, b.title) : null, body);
   });
 }
 // The reference's version of a block of this run (same node, same id), or null.
@@ -22,13 +22,16 @@ const refOf = (b, ctx) => ctx.node && ctx.side === "run" && comparable(ctx.node)
 
 const BLOCKS = {
   markdown: (b) => h("div", { class: "doc", "data-doc": b.doc || null }, markdown(b.text)),
-  metrics: (b, ctx) => b.declared ? declaredTable(b.declared) : metricsTable(b, refOf(b, ctx), ctx),
+  metrics: (b, ctx) => metricsTable(b, refOf(b, ctx), ctx),
   table: (b) => tableOf(b.columns, b.rows, b.total),
   chart: (b, ctx) => { const ref = refOf(b, ctx); return chart(b, ref, ref && reference().name); },
   data: (b) => fileCard(b),
   figure: (b) => h("figure", { class: "figure" }, h("img", { src: b.media === "image/svg+xml" ? URL.createObjectURL(new Blob([b.data], { type: b.media }))
     : imageFromBase64(b.data, b.media), alt: b.caption || "figure" }), b.caption ? h("figcaption", { class: "small" }, b.caption) : null),
-  // Documentation, filled with what only the page knows
+  // the page's own, filled with what only the page knows
+  results: (b, ctx) => nodeResults(ctx.node, ctx),
+  fold: (b, ctx) => h("details", { class: "fold about", "data-fold": b.id, open: !!state.open[b.id],
+    ontoggle: (e) => { state.open[b.id] = e.target.open; } }, h("summary", {}, b.title), renderBlocks(b.blocks, ctx)),
   dataset: (b) => b.brief ? dataBrief(datasets[b.dataset]) : dataCard(datasets[b.dataset]),
   settings: (b) => h("div", { class: "settings-inline" }, b.keys.map(paramControl)),
   links: (b) => h("ul", { class: "files" }, b.items.map((it) => h("li", {},
@@ -37,13 +40,13 @@ const BLOCKS = {
   code: (b) => { const text = has(`project/${b.path}`) ? textOf(`project/${b.path}`) : null;
     return text !== null ? h("details", { class: "fold" }, h("summary", {}, b.path), h("pre", { class: "src" }, text)) : null; },
   contents: (b) => contentsList(b.nodes),
-  // the overview's and a group's Results, made from this session's state
+  // the overview's and a group's, made from this session's state
   headline: () => headline.length ? headlineTable() : null,
   changes: () => reference() ? changesLine(reference()) : null,
   trend: () => state.prev.length ? trendTable() : null,
   runs: () => runsTable(),
   nodes: (b) => nodesTable(b.nodes),
-  // a block of a node's Results, shown on another page (app.yaml overview:)
+  // a block of a node's results, shown on another page (app.yaml overview:)
   pick: (b) => { const rec = state.node[b.node], blk = rec && rec.blocks && rec.blocks.find((x) => x.id === b.block);
     if (!blk) return null;
     const draw = BLOCKS[blk.type], ctx = { node: b.node, side: shownSide(b.node) };
@@ -56,12 +59,6 @@ const tableOf = (columns, rows, total) => h("div", { class: "runs-wrap" }, h("ta
   total > rows.length ? h("p", { class: "small muted" }, `${(total - rows.length).toLocaleString("en-US")} more rows`) : null);
 
 // ---- metrics
-function declaredTable(list) {
-  return h("table", { class: "kv metrics-decl" }, h("thead", {}, h("tr", {}, h("th", {}, "metric"), h("th", {}, "key"), h("th", {}, ""))),
-    h("tbody", {}, list.map((m) => h("tr", { "data-metric": m.id },
-      h("td", {}, m.label, m.headline ? h("span", { class: "pill accent" }, "headline") : null, m.desc ? h("div", { class: "small muted" }, m.desc) : null),
-      h("td", { class: "mono small" }, m.key), h("td", { class: "small muted" }, goalText(m))))));
-}
 // What the node declares first; when it declares some, the other numbers its output holds
 // are folded under "Other metrics".
 function metricsTable(b, ref, ctx) {
@@ -119,7 +116,7 @@ function runsTable() {
 }
 function nodesTable(names) {
   return h("table", { class: "kv group-results" }, h("thead", {}, h("tr", {}, h("th", {}, "node"), h("th", {}, "state"), h("th", {}, "metrics"))),
-    h("tbody", {}, names.map((n) => h("tr", { "data-node": n }, h("td", {}, nodeLink(n)),
+    h("tbody", {}, names.map((n) => h("tr", { "data-node": n }, h("td", {}, nodeLink(n), nodes[n].desc ? h("div", { class: "small muted" }, nodes[n].desc) : null),
       h("td", {}, h("span", { class: `pill ${state.node[n].status}` }, stateLabel(n))),
       h("td", { class: "small" }, declaredFor(n).map((m) => h("div", {}, `${m.label} `, h("span", { class: "mono" }, fmt(ran(n) ? metricValue(state.node[n], m) : undefined)))))))));
 }

@@ -24,7 +24,7 @@ groups:
       Fits the calibration curve on the training rows and scores it on held-out rows
       against a straight-line baseline.
 
-# Blocks of nodes' views placed on the overview's Results too.
+# Blocks of nodes' views placed on the overview too.
 overview:
   - {node: evaluate, block: curve}
 docs: [README.md]

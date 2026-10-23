@@ -23,7 +23,7 @@ def train(featurize, *, alpha: Annotated[float, Range(0.0001, 10, log=True), Not
     return {"intercept": float(y_mean), "coef": w, "train_rmse": rmse}
 
 
-def view(out):            # optional: its Results (docs/blocks.md)
+def view(out):            # optional: its results (docs/blocks.md)
     return [ui.metrics(), ui.chart(...)]
 ```
 
@@ -32,7 +32,7 @@ def view(out):            # optional: its Results (docs/blocks.md)
 | positional parameters | what it reads: another node's output (by the node's name) or a dataset (by its name in app.yaml; the node gets the mounted file's path) |
 | keyword-only parameters | its **settings**: literal defaults; `Annotated[type, Range(min, max, step, log=…)]`, `Choices(...)`, `Note("...")` for the controls |
 | the return value | its **output**: any Python value (dicts, numpy arrays, pandas or pyarrow tables, dataclasses), kept in memory and passed to the nodes that read it |
-| the module docstring | its Documentation (Markdown; the first line is its summary) |
+| the module docstring | the top of its page (Markdown; the first line is its summary) |
 | `METRICS = {key: {label, goal, headline, desc} \| "label"}` | the numbers its output holds (dotted keys into a dict, or attributes), shown before any run without values; `headline: True` ones answer the app's question |
 | `SCHEMA = {dataset: {fields: [...]}}` | what a dataset it reads should hold (a subset of Frictionless Table Schema), checked as soon as the data loads |
 | `GROUP = "..."` | the group it is drawn in (documented in app.yaml `groups:`) |
@@ -56,7 +56,7 @@ inputs (a dataset's key is its fingerprint). So:
 With **Auto** on (the default), a change runs what it reaches at once; Run runs what is
 stale, or, when everything is current, every node again. A failing node is reported with
 its traceback, and what depends on it is blocked; a failing view is reported in the node's
-Results without failing the node.
+results without failing the node.
 
 ## What makes the baseline stale
 

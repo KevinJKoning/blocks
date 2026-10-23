@@ -1,5 +1,5 @@
 """Reading apps: the graph from node functions' signatures (ast, never run natively), their
-declarations, datasets, views; building pages and their Documentation (no browser)."""
+declarations, datasets, views; building pages of blocks (no browser)."""
 import copy
 import json
 import re
@@ -90,11 +90,15 @@ def test_views_docs_and_declarations_never_make_the_baseline_stale(repo):
 def test_documentation_pages_are_blocks(repo):
     a = spec.load_app(repo, SENSOR)
     p = docs.pages(a)
-    assert [b["type"] for b in p["nodes"]["prepare"]] == ["markdown", "dataset", "metrics", "settings", "links", "links", "code"]
-    assert p["nodes"]["prepare"][3]["keys"] == ["prepare.test_fraction", "prepare.seed", "prepare.outlier_z"]
-    assert [b["type"] for b in p["nodes"]["evaluate"]] == ["markdown", "metrics", "links", "code"]
-    assert [b["type"] for b in p["groups"]["Modelling"]] == ["markdown", "contents"]
-    assert [b["type"] for b in p["overview"]][:3] == ["markdown", "markdown", "dataset"]
+    prepare = p["nodes"]["prepare"]
+    assert [b["type"] for b in prepare] == ["markdown", "settings", "results", "views", "fold"]   # read top to bottom
+    assert prepare[1]["keys"] == ["prepare.test_fraction", "prepare.seed", "prepare.outlier_z"]
+    assert [b["type"] for b in prepare[-1]["blocks"]] == ["dataset", "links", "links", "code"]     # the reference, folded
+    assert [b["type"] for b in p["nodes"]["evaluate"]] == ["markdown", "results", "views", "fold"]  # no settings
+    assert [b["type"] for b in p["groups"]["Modelling"]] == ["markdown", "nodes", "views"]
+    assert [b["type"] for b in p["overview"]] == ["markdown", "markdown", "headline", "changes", "pick", "views",
+                                                   "markdown", "trend", "runs", "fold"]
+    assert [b["type"] for b in p["overview"][-1]["blocks"]] == ["dataset", "contents"]
 
 
 def test_builds(repo):

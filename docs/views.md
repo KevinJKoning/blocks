@@ -15,35 +15,35 @@ handed to it at run time over a message bridge. Nothing a node returns ever runs
 ```yaml
 # projects/sensor-calibration/plugins/calibration-views/plugin.yaml
 views:
-  preview:                         # a node's Documentation: before any run
+  preview:                         # reads a dataset: shown before any run
     at: node:prepare
-    tab: documentation
     title: The measurements
     code: [plot.js, preview.js]    # run in this order; paths inside the plugin
     css: [views.css]
     reads: [measurements]          # a dataset (queried with DuckDB)
     can: [query]
-  residuals:                       # a node's Results (tab: results is the default)
+  residuals:                       # reads a node: shown once it has run
     at: node:evaluate
     code: [plot.js, residuals.js]
     reads: [evaluate]              # a node: bridge.read("evaluate") is its output as JSON
 ```
 
-`at` is `data` (the Data modal), `overview`, `node:<name>` or `group:<name>`; `tab` is
-`documentation` or `results`. Checked when the app is loaded:
+`at` is `data` (the Data modal), `overview`, `node:<name>` or `group:<name>`. What a view
+reads says when it is shown. Checked when the app is loaded:
 
 - every `code`/`css` file exists inside the plugin;
-- a view shown **before any run** (the Data modal, a Documentation tab) reads datasets; a
-  Results view reads nodes;
+- a view reads datasets (shown **before any run**; every Data modal view does) or nodes'
+  outputs (shown once they have run), not both;
 - `can` ⊆ `{params, query, download}` in the Data modal, `{query, download}` elsewhere;
 - view names are unique across the app's plugins.
 
-A view's frame sits after the blocks of its page.
+A view's frame sits where its page has a `views` block: on a node's page after its
+results, before the folded reference material.
 
 ## When a view exists
 
-Data modal views mount at start-up, Documentation views the first time they are shown, and
-a Results view once every node it reads has run. A frame is never moved (moving an iframe
+Data modal views mount at start-up, a view of datasets the first time its page is shown,
+and a view of nodes once every node it reads has run. A frame is never moved (moving an iframe
 reloads it): the report keeps one slot for view frames and only hides and shows them.
 
 ## Composing a view document (`app/views.js`)
@@ -88,7 +88,7 @@ over the port, and the host checks every request against the view's declaration.
 
 | call | needs | does |
 |---|---|---|
-| `bridge.view` | — | `{name, title, at, tab, reads, can}` |
+| `bridge.view` | — | `{name, title, at, reads, can}` |
 | `bridge.ready(summary?)` | — | required; call once the first state is **drawn** |
 | `bridge.describe(obj)` | — | optional JSON summary of what is on screen, for agents and harvest |
 | `bridge.on("update", fn)` | — | new state: per node `status`, `cached`, `metrics`, `shown`, `compare`; per dataset `status`, `original`, `path`, `profile`, `schema`; `reference` and `runs`; `settings`; `headline`. Return a promise that settles when the drawing is done |

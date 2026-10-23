@@ -1,9 +1,9 @@
 // blocks browser app. An app is a graph of Python functions (nodes) run in Pyodide, with UI
 // blocks on top: the page is the graph as a DAG next to a report, and the DAG is the
-// report's table of contents (the overview, each group, each node). Each page has a
-// Documentation tab (the node's docstring, its data and schema, its settings as live
-// controls, its code) and a Results tab (the blocks its view made of its output). Settings
-// change the graph reactively: only the nodes downstream of a change run again, and a
+// report's table of contents (the overview, each group, each node). A node's page is its
+// docstring, its settings as live controls, its results (the blocks its view made of its
+// output), and a fold with its data and schema, its links and its code. Settings change
+// the graph reactively: only the nodes downstream of a change run again, and a
 // view re-renders from cached outputs. An app's own plugins add sandboxed views
 // (views.js), never code in this page.
 //
@@ -101,9 +101,9 @@ const state = {
   data: {},             // dataset name -> {status: waiting|loading|mounted|error, original, file, size, note, profile, check}
   node: Object.fromEntries(order.map((n) => [n, { status: "pending" }])),
   runs: [],
-  // What the report shows: the app's overview, a group or a node, and in which tab.
+  // What the report shows: the app's overview, a group or a node; which of its folds are open.
   sel: { kind: "overview", name: null },
-  tab: "documentation",
+  open: {},
   auto: true,           // run what a change makes stale as soon as it is made
   ready: false,
   busy: false,
@@ -133,7 +133,6 @@ const metricValue = (rec, m) => rec && rec.metrics ? rec.metrics[m.key] : undefi
 const headlineOf = (recs) => Object.fromEntries(headline.map((m) => [m.id, metricValue((recs || {})[m.node], m)]));
 const headlineNow = () => headlineOf(state.node);
 const better = (m, a, b) => (m.goal === "min" ? a < b : a > b);
-const goalText = (m) => m.goal === "min" ? "lower is better" : m.goal === "max" ? "higher is better" : "";
 
 function validate(key, value) {
   const s = settingSpec[key] || {};

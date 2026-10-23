@@ -317,7 +317,6 @@ async function runGraph(source = "ui", rerunAll = false) {
   state.busy = true;
   state.hasRun = true;
   for (const n of order) if (state.node[n].status !== "done") state.node[n] = { ...state.node[n], status: "running" };
-  if (source === "ui" && !state.hasRunUi) { state.hasRunUi = true; state.tab = "results"; }
   renderHeader(); renderGraph();
   setStatus("Running…");
   const t0 = performance.now();

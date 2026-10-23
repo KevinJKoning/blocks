@@ -25,7 +25,7 @@ The loop: edit node files, then look at the page or call its tools (`blocks serv
 - Return plain values: dicts of numbers and arrays, pandas or pyarrow tables, dataclasses.
   Numbers at the top level of a dict are its metrics; declare the ones that matter in
   `METRICS` (`headline: True` for the answer).
-- The docstring is the node's Documentation: say what it does and why, in Markdown.
+- The docstring tops the node's page: say what it does and why, in Markdown.
 - `SCHEMA` on the node that reads a dataset; `GROUP` to group nodes (document groups in
   app.yaml `groups:`).
 - `view(out)` returns `blocks.ui` blocks in the order a reader should see them: an input

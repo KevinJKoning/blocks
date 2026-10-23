@@ -54,8 +54,7 @@ async function sweep({ grid, max_runs = 50, restore = true, source = "sweep" }) 
   }
   return { runs: results, best, restored: restore };
 }
-const SEL = { type: "object", properties: { node: { type: "string", enum: order }, group: { type: "string", enum: groupNames },
-  tab: { type: "string", enum: ["documentation", "results"] } } };
+const SEL = { type: "object", properties: { node: { type: "string", enum: order }, group: { type: "string", enum: groupNames } } };
 const tools = [
   { name: "get_overview", description: "The app's question and description, its headline metrics (with goals) for this run and the reference run, nodes with their inputs and status, groups, settings with ranges, datasets with what they hold, previous runs loaded, run count.",
     inputSchema: { type: "object", properties: {} },
@@ -70,13 +69,13 @@ const tools = [
         reference: r && r.name, previous_runs: state.prev.map((x) => ({ name: x.name, app: x.doc.app, made: x.doc.made, from: x.from, headline: x.doc.headline })),
         plugins: (manifest.plugins || []).map((p) => p.name), runs: state.runs.length, runtime: manifest.runtime,
         superseded: (manifest.superseded || []).map((s) => s.name),
-        views: viewList().map(({ name, title, at, tab, status }) => ({ name, title, at, tab, status })) }; } },
-  { name: "get_node", description: "One node: its documentation (docstring), file, inputs, settings, the metrics it declares and this run's values (and the reference's), its output's digest, its Results blocks, log, error.",
+        views: viewList().map(({ name, title, at, status }) => ({ name, title, at, status })) }; } },
+  { name: "get_node", description: "One node: its documentation (docstring), file, inputs, settings, the metrics it declares and this run's values (and the reference's), its output's digest, its results blocks, log, error.",
     inputSchema: { type: "object", properties: { name: { type: "string", enum: order } }, required: ["name"] },
     run: ({ name }) => snapshot(name) },
-  { name: "get_report", description: "What the report shows now (overview, a group or a node; documentation or results tab) as text.",
+  { name: "get_report", description: "What the report shows now (the overview, a group or a node) as text; folds count only when open.",
     inputSchema: { type: "object", properties: {} },
-    run: () => ({ selected: state.sel, tab: shownTab(), shown: !!state.reportShown, text: ui.report ? ui.report.innerText : "" }) },
+    run: () => ({ selected: state.sel, shown: !!state.reportShown, text: ui.report ? ui.report.innerText : "" }) },
   { name: "get_source", description: "Read a file of the app, e.g. nodes/train.py or app.yaml (paths relative to the app).",
     inputSchema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
     run: ({ path }) => ({ path, text: textOf(has(path) ? path : `project/${path}`) }) },
@@ -129,7 +128,7 @@ const tools = [
   { name: "set_reference", description: "Pick the previous run this run is compared with (omit name for the default: \"baseline\", else the latest).",
     inputSchema: { type: "object", properties: { name: { type: "string" } } },
     run: ({ name } = {}) => { setReference(name || null); return { reference: reference() && reference().name }; } },
-  { name: "show_reference", description: "In a node's Results, show the reference run's blocks instead of this run's (on:false switches back).",
+  { name: "show_reference", description: "In a node's results, show the reference run's blocks instead of this run's (on:false switches back).",
     inputSchema: { type: "object", properties: { node: { type: "string", enum: order }, on: { type: "boolean" } }, required: ["node"] },
     run: ({ node, on = true }) => { if (on && !comparable(node)) throw new Error(`${node}: no reference results to show (run it, and load a run that has it)`);
       setShown(node, on); return { node, shown: on ? "reference" : "run" }; } },
@@ -146,10 +145,10 @@ const tools = [
     run: ({ sql, limit }) => call("query", { sql, limit: Math.min(limit || 200, 5000) }) },
   { name: "reset", description: "Restore default settings and the original datasets.", inputSchema: { type: "object", properties: {} },
     run: async () => { await resetAll(); refresh(); return { ok: true }; } },
-  { name: "select", description: "Show the overview (no node or group), a group or a node in the report, in a tab (documentation or results).",
+  { name: "select", description: "Show the overview (no node or group), a group or a node in the report.",
     inputSchema: SEL,
-    run: ({ node, group, tab } = {}) => { select(node ? { kind: "node", name: node } : group ? { kind: "group", name: group } : { kind: "overview" }, tab);
-      return { selected: state.sel, tab: shownTab() }; } },
+    run: ({ node, group } = {}) => { select(node ? { kind: "node", name: node } : group ? { kind: "group", name: group } : { kind: "overview" });
+      return { selected: state.sel }; } },
   { name: "list_views", description: "The app's views (plugin.yaml views): where each is shown, what it may read and do, and its health: status (ready once it called bridge.ready), errors, CSP violations, and the summary it reports with bridge.describe.",
     inputSchema: { type: "object", properties: {} },
     run: () => ({ views: viewList() }) },

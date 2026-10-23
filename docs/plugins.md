@@ -1,7 +1,7 @@
 # Plugins
 
 Most of what an app shows needs no plugin: a node's file documents it and its view makes
-its Results (`docs/nodes.md`, `docs/blocks.md`); charts, tables, data cards, comparing runs
+its results (`docs/nodes.md`, `docs/blocks.md`); charts, tables, data cards, comparing runs
 and schema checks are built in. A plugin is for what varies by app and cannot be a block:
 
 - **dataset formats**: a Python adapter that turns what the viewer has into what nodes
@@ -24,7 +24,7 @@ plugins (`src/blocktool/plugins/<name>/`). Each is a directory with a `plugin.ya
 |---|---|
 | `title`, `description` | shown in Settings > App |
 | `formats` | `{format: module}`: dataset adapters. A module runs natively (when the app is loaded) and in the ingest worker, so its module level uses the standard library only |
-| `views` | `{name: {at, tab, title, code, css, reads, can}}`: sandboxed views |
+| `views` | `{name: {at, title, code, css, reads, can}}`: sandboxed views |
 
 Plugin files are components of the page like any other (hashed, checked at start-up, view
 code pinned in the CSP). Views never change results, so they count in the app's `ui_sha`,

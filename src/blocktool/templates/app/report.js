@@ -1,10 +1,11 @@
 // report.js: the report beside the DAG (docs/blocks.md). The DAG is its table of contents:
-// the app's overview, a group, or a node. Each page has a Documentation tab (blocks that
-// come with the page, some live) and a Results tab (once it has run). Every page is a list
-// of blocks, drawn by blocks.js; this file only decides which.
+// the app's overview, a group, or a node. Each is one page, a list of blocks read top to
+// bottom (blocktool/docs.py): what it is, its settings, its results once it has run, its
+// views, and a fold with the reference material. Blocks are drawn by blocks.js; this file
+// draws the page around them and a node's results.
 //
-// The report is head | blocks | view slot, and only head and blocks are rebuilt: view
-// frames live in the slot, because moving an iframe in the DOM reloads it.
+// The report is head | blocks before the views | view slot | blocks after, and the view
+// slot is never rebuilt: view frames live in it, because moving an iframe reloads it.
 
 const isRun = (n) => state.node[n].status !== "pending";
 function resultsAvailable(sel) {
@@ -12,59 +13,54 @@ function resultsAvailable(sel) {
   if (sel.kind === "group") return groups[sel.name].nodes.some(isRun);
   return isRun(sel.name);
 }
-const shownTab = () => state.tab === "results" && resultsAvailable(state.sel) ? "results" : "documentation";
-// Whether the report shows something that depends on node n (so a run redraws it).
-const reportShows = (n) => state.sel.kind === "overview" || (state.sel.kind === "node" && state.sel.name === n)
-  || (state.sel.kind === "group" && groups[state.sel.name].nodes.includes(n));
+const pageOf = (sel) => sel.kind === "overview" ? manifest.pages.overview
+  : sel.kind === "group" ? manifest.pages.groups[sel.name] : manifest.pages.nodes[sel.name];
 
-// The blocks of a page, and the node and run they belong to.
-function pageBlocks(sel, tab) {
-  const pages = manifest.pages;
-  if (tab === "documentation") {
-    const list = sel.kind === "overview" ? pages.overview : sel.kind === "group" ? pages.groups[sel.name] : pages.nodes[sel.name];
-    return { list, ctx: {} };
-  }
-  if (sel.kind === "overview") return { list: [{ type: "headline", title: headline.length ? "Headline metrics" : null }, { type: "changes" },
-    ...(manifest.overview || []).map((o) => ({ type: "pick", node: o.node, block: o.block })),
-    { type: "trend", title: state.prev.length ? "This run and previous runs" : null }, { type: "runs", title: `Runs this session (${state.runs.length})` }], ctx: {} };
-  if (sel.kind === "group") return { list: [{ type: "nodes", nodes: groups[sel.name].nodes }], ctx: {} };
-  const n = sel.name, rec = shownRecord(n);
-  return { list: rec ? rec.blocks || [] : [], ctx: { node: n, side: shownSide(n) } };
-}
 function renderReport() {
   if (!ui.report) return;
   if (!ui.viewSlot) {
     ui.reportHead = h("div", { class: "report-head" }); ui.reportBody = h("div", {}); ui.viewSlot = h("div", { class: "view-slot" });
-    ui.report.append(ui.reportHead, ui.reportBody, ui.viewSlot);
+    ui.reportTail = h("div", {});
+    ui.report.append(ui.reportHead, ui.reportBody, ui.viewSlot, ui.reportTail);
   }
-  const sel = state.sel, tab = shownTab(), body = h("div", {});
+  const sel = state.sel, list = pageOf(sel), at = list.findIndex((b) => b.type === "views");
+  const ctx = sel.kind === "node" ? { node: sel.name, side: shownSide(sel.name) } : {};
+  // A setting changed here re-renders the page (and, with Auto, again after the run): keep its focus.
+  const active = ui.report.contains(document.activeElement) && document.activeElement.closest("[data-param]");
+  const focus = active && { key: active.dataset.param, type: document.activeElement.type };
+  const body = h("div", {});
   if (state.fatal) put(body, h("div", { class: "card err" }, h("strong", {}, "The runtime failed to start."), h("pre", { class: "log" }, state.fatal)));
-  if (sel.kind === "node" && tab === "results") put(body, runHeader(sel.name));
-  const { list, ctx } = pageBlocks(sel, tab);
-  if (sel.kind !== "node" || tab !== "results" || ran(sel.name)) put(body, renderBlocks(list, ctx));
-  const s = sel.kind === "node" && tab === "results" && state.node[sel.name];
-  if (s && s.log) put(body, h("details", { class: "fold" }, h("summary", {}, "Log"), h("pre", { class: "log" }, s.log)));
+  put(body, renderBlocks(at < 0 ? list : list.slice(0, at), ctx));
   const scroll = ui.report.scrollTop;
-  ui.reportHead.replaceChildren(reportHead(sel, tab));
+  ui.reportHead.replaceChildren(reportHead(sel));
   ui.reportBody.replaceChildren(body);
+  ui.reportTail.replaceChildren(...renderBlocks(at < 0 ? [] : list.slice(at + 1), ctx).filter(Boolean));
   ui.report.dataset.kind = sel.kind;
-  ui.report.dataset.tab = tab;
   showReportViews();
   ui.report.scrollTop = scroll;
+  if (focus) {
+    const el = ui.report.querySelector(`[data-param="${CSS.escape(focus.key)}"] input[type="${focus.type}"], [data-param="${CSS.escape(focus.key)}"] select`);
+    if (el) el.focus({ preventScroll: true });
+  }
 }
-function reportHead(sel, tab) {
+function reportHead(sel) {
   const title = sel.kind === "overview" ? manifest.title : sel.name;
   const status = sel.kind === "node" ? h("span", { class: `pill ${state.node[sel.name].status}` }, stateLabel(sel.name))
     : sel.kind === "group" ? h("span", { class: `pill ${groupStatus(sel.name)}` }, NODE_STATUS[groupStatus(sel.name)]) : null;
-  const tabBtn = (id, label, enabled) => h("button", { role: "tab", class: "tab", id: `tab-${id}`, "data-tab": id,
-    "aria-selected": String(tab === id), disabled: !enabled, title: enabled ? null : "Results appear once this has run",
-    onclick: () => { state.tab = id; renderReport(); } }, label);
   return h("div", {},
     h("div", { class: "crumb small muted" }, sel.kind === "overview" ? "Overview" : [h("button", { class: "btn link", onclick: () => select({ kind: "overview" }) }, manifest.title), " / ",
       sel.kind === "node" && groupOf[sel.name] ? [groupLink(groupOf[sel.name]), " / "] : null, sel.kind === "group" ? "Group" : "Node"]),
-    h("h2", {}, title, status),
-    h("div", { class: "tabs", role: "tablist", "aria-label": "Report" },
-      tabBtn("documentation", "Documentation", true), tabBtn("results", "Results", resultsAvailable(sel))));
+    h("h2", {}, title, status));
+}
+// A node's results: its run state, then the blocks its view made (this run's, or the
+// reference's), then its log.
+function nodeResults(n, ctx) {
+  const s = state.node[n];
+  if (!ran(n) && s.status !== "error" && s.status !== "blocked")
+    return h("p", { class: "small muted", "data-not-run": "" }, s.status === "running" ? "Running…" : "Not run yet: Run computes it, and what it reads.");
+  const rec = shownRecord(n);
+  return [runHeader(n), ran(n) ? renderBlocks(rec ? rec.blocks || [] : [], ctx) : null,
+    s.log ? h("details", { class: "fold" }, h("summary", {}, "Log"), h("pre", { class: "log" }, s.log)) : null];
 }
 // A node's run state, and the previous run it is compared with (a switch to show that run's results).
 function runHeader(n) {

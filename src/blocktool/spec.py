@@ -38,8 +38,7 @@ DEFAULT_TOL = {"rel_tol": 1e-9, "abs_tol": 1e-12}
 APP_KEYS = {"title", "question", "description", "data", "groups", "plugins", "packages", "overview",
             "docs", "runs", "verify", "ui", "env"}
 DATASET_KEYS = ("path", "at", "desc", "inline", "format")
-VIEW_KEYS = {"at", "tab", "title", "code", "css", "reads", "can"}
-TABS = ("documentation", "results")
+VIEW_KEYS = {"at", "title", "code", "css", "reads", "can"}
 _NAME = re.compile(r"^[a-z_][a-z0-9_]*$")
 
 
@@ -334,8 +333,9 @@ def _placement(where: str, at: str, graph: dict, groups: dict) -> dict:
 
 
 def read_views(app_plugins: dict, graph: dict, groups: dict, datasets: dict) -> dict:
-    """The sandboxed views of the app's plugins (docs/views.md). A view shown before any run
-    (the Data modal, a Documentation tab) reads datasets; a Results view reads nodes' outputs."""
+    """The sandboxed views of the app's plugins (docs/views.md). What a view reads says when it
+    is shown: one that reads datasets (every Data modal view) before any run, one that reads
+    nodes' outputs once they have run."""
     views = {}
     for p in app_plugins.values():
         for name, v in (p["views"] or {}).items():
@@ -346,25 +346,23 @@ def read_views(app_plugins: dict, graph: dict, groups: dict, datasets: dict) -> 
             if set(v) - VIEW_KEYS:
                 raise ValueError(f"{where}: unknown keys {sorted(set(v) - VIEW_KEYS)}")
             at = _placement(where, v.get("at"), graph, groups)
-            tab = v.get("tab") or ("documentation" if at["kind"] == "data" else "results")
-            if tab not in TABS:
-                raise ValueError(f"{where}: tab {tab!r} is not one of {list(TABS)}")
-            before = at["kind"] == "data" or tab == "documentation"
             code = [plugin_mod.component(p, posixpath.normpath(f)) for f in v.get("code") or []]
             css = [plugin_mod.component(p, posixpath.normpath(f)) for f in v.get("css") or []]
             if not code:
                 raise ValueError(f"{where}: needs at least one `code` file")
             reads = [str(r) for r in v.get("reads") or []]
+            before = at["kind"] == "data" or all(r in datasets for r in reads)
             for r in reads:
                 if before and r not in datasets:
-                    raise ValueError(f"{where}: reads {r!r}, which is not a dataset; it is shown before any run, so it reads data")
+                    raise ValueError(f"{where}: reads {r!r}, which is not a dataset; the Data modal shows it before any run, so it reads data")
                 if not before and r not in graph["nodes"]:
-                    raise ValueError(f"{where}: reads {r!r}, which is not a node")
+                    raise ValueError(f"{where}: reads {r!r}, " + ("a dataset, and nodes: a view reads datasets (shown before any run) "
+                                     "or nodes' outputs (shown once they have run), not both" if r in datasets else "which is not a node or a dataset"))
             can = list(v.get("can") or [])
             allowed = ("params", "query", "download") if at["kind"] == "data" else ("query", "download")
             if set(can) - set(allowed):
                 raise ValueError(f"{where}: can {sorted(set(can) - set(allowed))}; allowed here: {list(allowed)}")
-            views[name] = {"name": name, "plugin": p["name"], "title": v.get("title") or name, "at": at, "tab": tab,
+            views[name] = {"name": name, "plugin": p["name"], "title": v.get("title") or name, "at": at,
                            "before_run": before, "code": code, "css": css, "reads": reads, "can": can,
                            "paths": [datasets[r]["at"] for r in reads] if before else []}
     return views
@@ -395,7 +393,7 @@ def read_shipped_runs(app_dir: Path, decl) -> dict[str, dict]:
 
 
 def read_overview(decl, graph) -> list[dict]:
-    """app.yaml `overview:`: blocks of nodes' views placed on the overview's Results too."""
+    """app.yaml `overview:`: blocks of nodes' views placed on the overview too."""
     out = []
     for item in decl or []:
         if not isinstance(item, dict) or set(item) != {"node", "block"} or item["node"] not in graph["nodes"]:

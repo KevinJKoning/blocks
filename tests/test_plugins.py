@@ -37,24 +37,24 @@ def test_a_format_needs_its_plugin(tmp_path):
 def test_views_are_placed_and_kept_out_of_code_sha(repo):
     a = spec.load_app(repo, SENSOR)
     v = a["views"]
-    assert v["residuals"]["at"] == {"kind": "node", "target": "evaluate"} and v["residuals"]["tab"] == "results"
-    assert v["preview"]["tab"] == "documentation" and v["preview"]["before_run"]
+    assert v["residuals"]["at"] == {"kind": "node", "target": "evaluate"} and not v["residuals"]["before_run"]
+    assert v["preview"]["before_run"]                     # it reads a dataset, so it is there before any run
     assert v["residuals"]["reads"] == ["evaluate"] and v["preview"]["paths"] == ["data/measurements.parquet"]
     assert v["residuals"]["code"] == ["plugins/calibration-views/plot.js", "plugins/calibration-views/residuals.js"]
 
 
 @pytest.mark.parametrize("change, message", [
     (lambda v: v["residuals"].update(at="node:nope"), "must be data, overview, node:<node> or group:<group>"),
-    (lambda v: v["residuals"].update(tab="code"), "not one of"),
-    (lambda v: v["residuals"].update(reads=["measurements"]), "which is not a node"),
+    (lambda v: v["residuals"].update(tab="results"), "unknown keys"),
+    (lambda v: v["residuals"].update(reads=["evaluate", "measurements"]), "not both"),
+    (lambda v: v["residuals"].update(reads=["nope"]), "not a node or a dataset"),
     (lambda v: v["residuals"].update(code=["missing.js"]), "does not exist"),
     (lambda v: v["residuals"].update(code=["../../src/train.py"]), "inside the plugin"),
     (lambda v: v["residuals"].update(can=["network"]), "allowed"),
     (lambda v: v["residuals"].update(can=["params"]), "allowed here"),
     (lambda v: v["residuals"].update(can=["run"]), "allowed here"),
     (lambda v: v["preview"].update(at="data", can=["query", "run"]), "allowed here"),
-    (lambda v: v["preview"].update(reads=["evaluate"]), "which is not a dataset"),
-    (lambda v: v["residuals"].update(tab="documentation"), "which is not a dataset"),
+    (lambda v: v["preview"].update(at="data", reads=["evaluate"]), "which is not a dataset"),
 ])
 def test_view_declarations_are_checked(repo, change, message):
     edit_yaml(plugin_yaml(repo), lambda c: change(c["views"]))

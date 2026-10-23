@@ -5,8 +5,9 @@
 // origin, the page's CSP inherited plus the view's own narrower one (both built by
 // build.py). A frame reaches the app only through the port handed to view-bridge.js, and
 // every request is checked against what the view declared (reads, can). A view is shown in
-// the Data modal, or in the report of the overview, a group or a node, in one tab. Before a
-// run a view reads datasets (with DuckDB, confined to them); a Results view reads nodes' outputs.
+// the Data modal, or on the report's page of the overview, a group or a node. A view that
+// reads datasets is there before any run (with DuckDB, confined to them); one that reads
+// nodes' outputs once they have run.
 const views = manifest.views || {};
 const VIEW_READ_MAX = 64 * 2 ** 20;
 const frames = {};   // name -> {wrap, frame, port, t0, sent: number of the last state sent}
@@ -57,13 +58,13 @@ function mountView(name) {
     f.sent = ++viewSeq;
     viewState[name].status = "loading";   // a reloaded frame must report ready again
     ch.port1.postMessage({ type: "init", seq: f.sent, theme: currentTheme(), state: viewSnapshot(),
-      view: { name, title: v.title, at: v.at, tab: v.tab, reads: v.reads, can: v.can } });
+      view: { name, title: v.title, at: v.at, reads: v.reads, can: v.can } });
   });
   frame.srcdoc = viewDoc(name);
   return f.wrap;
 }
 const viewSel = (v) => ({ kind: v.at.kind, name: v.at.target });
-const viewHere = (v) => v.at.kind !== "data" && v.at.kind === state.sel.kind && (v.at.target || null) === (state.sel.name || null) && v.tab === shownTab();
+const viewHere = (v) => v.at.kind !== "data" && v.at.kind === state.sel.kind && (v.at.target || null) === (state.sel.name || null);
 // A result view has something to show once every node it reads has run.
 const viewCanShow = (v) => v.before_run || resultsAvailable(viewSel(v)) && v.reads.every((n) => ran(n));
 function showReportViews() {
@@ -98,7 +99,7 @@ const NEEDS = { setSettings: "params", query: "query", download: "download" };
 async function viewRequest(name, method, args) {
   const v = views[name];
   if (NEEDS[method] && !v.can.includes(NEEDS[method])) throw new Error(`view ${name} cannot ${method}: add '${NEEDS[method]}' to its can: in plugin.yaml`);
-  // read(name): a node's output as JSON (Results views), or a dataset's bytes (before a run).
+  // read(name): a node's output as JSON (a view of results), or a dataset's bytes (before a run).
   if (method === "read") {
     const what = String(args.name || "");
     if (!v.reads.includes(what)) throw new Error(`view ${name} may not read ${what}: not in its reads: in plugin.yaml`);
@@ -133,7 +134,7 @@ function themeViews() {
 }
 function viewList() {
   // settled: the view has drawn the latest state sent to it.
-  return Object.entries(views).map(([n, v]) => ({ name: n, plugin: v.plugin, title: v.title, at: v.at, tab: v.tab, reads: v.reads, can: v.can,
+  return Object.entries(views).map(([n, v]) => ({ name: n, plugin: v.plugin, title: v.title, at: v.at, reads: v.reads, can: v.can,
     ...viewState[n], loads: frames[n] ? frames[n].loads || 0 : 0,
     settled: viewState[n].status === "ready" && !!frames[n] && viewState[n].rendered >= frames[n].sent }));
 }
@@ -141,7 +142,7 @@ async function openView(name, timeoutMs = 15000) {
   const v = views[name];
   if (!v) throw new Error(`no view ${name} (have: ${Object.keys(views).join(", ") || "none"})`);
   if (!viewCanShow(v)) throw new Error(`view ${name} shows run results: run ${v.reads.join(", ")} first`);
-  if (v.at.kind === "data") openModal("data"); else { closeModal(); select(viewSel(v), v.tab); }
+  if (v.at.kind === "data") openModal("data"); else { closeModal(); select(viewSel(v)); }
   const t0 = performance.now();
   const settled = () => viewState[name].status === "ready" && frames[name] && viewState[name].rendered >= frames[name].sent;
   do await new Promise((r) => setTimeout(r, 50));   // lets a queued update reach the frame first

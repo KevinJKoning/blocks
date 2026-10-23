@@ -17,8 +17,8 @@ documentation), and everything shown is a layer of blocks over their outputs.
   inputs' keys. A change re-runs only what it reaches; with Auto on it runs at once. Views
   render from cached outputs and never re-run a node.
 - **Every page is a list of blocks** (`docs/blocks.md`): the overview, each group and each
-  node, with a Documentation tab (built with the page; settings are live controls there)
-  and a Results tab (a node's view). One renderer draws every block.
+  node, read top to bottom. The list is built with the page; some blocks are live (the
+  settings as controls, a node's results, made by its view). One renderer draws every block.
 - **Comparison is one rule**: a block of this run shows the reference run's block with the
   same node and id. Runs are data (`docs/runs.md`): files that hold settings, metrics,
   output digests and blocks.
@@ -65,7 +65,7 @@ src/blocktool/             the tooling: spec, docs, build, server, harvest, veri
 | `blocks/session.py` | what the worker calls: run, read an output, profile and validate data, DuckDB queries |
 | `blocks/schema.py` | table schemas: check a declaration (natively), validate data (in Pyodide) |
 | `blocktool/spec.py` | reads an app: nodes and the graph from signatures, settings, declarations, datasets, views, runs, `code_sha`, `ui_sha` |
-| `blocktool/docs.py` | every page's Documentation as blocks |
+| `blocktool/docs.py` | every page as a list of blocks |
 | `blocktool/build.py` | packs a page: manifest (graph, pages, settings) + inert components, the app script live; `unpack`, `check` |
 | `blocktool/server.py` | `blocks serve`: projects index, apps rebuilt per request, `/_runtime/`, `/_data/`, runs API |
 | `blocktool/harvest.py`, `verify.py` | headless runs (baseline, regression, offline build), comparing run files |
@@ -81,7 +81,8 @@ src/blocktool/             the tooling: spec, docs, build, server, harvest, veri
 - **DAG**: nodes in their groups, each with its state (`○ not run` from the start), the data
   it reads (rows, size, schema check) and its declared metrics (values and Δ after a run).
   A node selects that node, a group's label its group, the background the overview.
-- **Report**: crumb, title, Documentation / Results tabs, the page's blocks, its views.
+- **Report**: crumb, title, the page's blocks (a node: docstring, settings, results, views,
+  then its data, links and code folded).
 
 ## Data flow of a run
 

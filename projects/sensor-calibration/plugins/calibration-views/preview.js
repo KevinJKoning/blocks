@@ -1,4 +1,4 @@
-// In the prepare node's Documentation: what the measurements look like before anything
+// On the prepare node's page: what the measurements look like before anything
 // runs: how many paired readings, how many have a missing value, and reading against
 // reference. It reads only the dataset (DuckDB confines its SQL to it), so it also previews
 // a file the viewer has just swapped in.

@@ -262,6 +262,11 @@ table.kv tr.changed td:first-child::after { content: " • changed"; color: var(
 .run-state .pill { margin-left: 0; }
 details.fold { margin: 14px 0 0; border-top: 1px solid var(--line); padding-top: 6px; }
 details.fold > summary { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+/* a page's reference material (blocktool/docs.py): the last thing on it, folded */
+details.fold.about { margin-top: 28px; padding-top: 10px; }
+details.fold.about > summary { font-size: 12.5px; cursor: pointer; }
+details.fold.about > .block:first-of-type > h3 { margin-top: 12px; }
+.block-results [data-not-run] { margin: 4px 0 0; }
 ul.contents { padding-left: 18px; margin: 4px 0; } ul.contents li { margin: 2px 0; }
 ul.data-list li { display: block; font-family: var(--sans); font-size: 13px; }
 .btn.link.mono { font-family: var(--mono); font-size: 12.5px; }
@@ -273,7 +278,7 @@ table.kv td.best { font-weight: 700; color: var(--ok); }
 table.kv td.best::after { content: " ★"; font-family: var(--sans); }
 table.headline td:first-child { font-weight: 550; }
 
-/* a dataset in full: the Documentation of a node that reads it */
+/* a dataset in full: on the page of a node that reads it */
 .data-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--bg); margin: 8px 0 12px; }
 .data-head { display: flex; align-items: center; gap: 8px; }
 .data-head .pill { margin-left: 0; }
@@ -311,7 +316,7 @@ table.schema-fields tr.bad td:first-child .mono { color: var(--err); }
 .delta.better { color: var(--ok); } .delta.worse { color: var(--err); }
 table.trend tr.now td { font-weight: 600; }
 
-/* the Auto switch next to Run, and settings shown live in a node's Documentation */
+/* the Auto switch next to Run, and settings shown live on a node's page */
 .cap.auto { gap: 6px; padding: 0 12px; font-weight: 500; cursor: pointer; }
 .cap.auto input { margin: 0; accent-color: var(--accent); }
 .settings-inline .param:last-child { border-bottom: 0; }

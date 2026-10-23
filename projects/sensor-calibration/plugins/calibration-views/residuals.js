@@ -1,4 +1,4 @@
-// Residual explorer (the evaluate node's Results): held-out residuals against the reading,
+// Residual explorer (in the evaluate node's results): held-out residuals against the reading,
 // with a threshold the reader can move to see where the curve misses most.
 (() => {
   const root = document.getElementById("view");

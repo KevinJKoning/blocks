@@ -26,7 +26,7 @@ function buildShell() {
     zoomBy(Math.exp(-ev.deltaY * 0.01), { x: ev.clientX, y: ev.clientY });
   }, { passive: false });
   // A click on the drawing's background (not a node or group) shows the app's overview.
-  ui.graph.addEventListener("click", (ev) => { if (!ev.target.closest(".node, .pele-cluster-label")) select({ kind: "overview" }, undefined, false); });
+  ui.graph.addEventListener("click", (ev) => { if (!ev.target.closest(".node, .pele-cluster-label")) select({ kind: "overview" }, false); });
   enablePan(ui.graph);
   ui.legend = h("div", { class: "legend", "aria-hidden": "true" },
     [["○", "not run", "var(--muted)"], ["…", "running", "var(--run)"], ["✓", "done", "var(--ok)"], ["↻", "stale", "var(--warn)"],

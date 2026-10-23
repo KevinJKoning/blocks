@@ -3,7 +3,7 @@
 // ------------------------------------------------------------------ modals
 // Data: the datasets (swap a file to run on other data), and previous runs (run files to
 // compare this run with). Settings: two sections, Graph (every node's settings, in graph
-// order; each node's are also live in its Documentation) and App (theme, report, plugins,
+// order; each node's are also live on its page) and App (theme, report, plugins,
 // earlier versions, this build). Each is a <dialog> that is only
 // opened and closed, never moved, so the views in it keep their state. Data opens by
 // itself while data is missing.
@@ -107,7 +107,7 @@ function paramControl(key) {
     try { await setSettings({ [key]: v }); } catch (e) { hint.textContent = e.message; return; }
     refresh();
   };
-  const id = `p-${++paramSeq}`;   // a setting shows in Settings and in its node's Documentation
+  const id = `p-${++paramSeq}`;   // a setting shows in Settings and on its node's page
   const row = h("div", { class: "row" }, h("label", { class: "key", for: id }, key));
   const wrap = h("div", { class: `param${changed ? " changed" : ""}`, "data-param": key }, row);
   if (s.choices) {
@@ -165,7 +165,7 @@ function dataControl(d) {
     st.status === "mounted" && !st.original && d.source !== "user" ? h("button", { class: "btn", onclick: () => restoreData(d.name) }, "Restore") : null,
     file, d.desc ? h("div", { class: "small" }, d.desc) : null, msg,
     readers.length ? h("div", { class: "small" }, "Details: ", readers.map((n, i) => [i ? ", " : "",
-      h("button", { class: "btn link", onclick: () => { closeModal(); select({ kind: "node", name: n }, "documentation"); } }, n)])) : null,
+      h("button", { class: "btn link", onclick: () => { closeModal(); select({ kind: "node", name: n }); } }, n)])) : null,
     st.status === "converting" ? ingestStatus(d, st) : null);
 }
 

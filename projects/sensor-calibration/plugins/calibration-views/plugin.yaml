@@ -3,7 +3,6 @@ description: The measurements before any run (queried with DuckDB), and a residu
 views:
   preview:
     at: node:prepare
-    tab: documentation
     title: The measurements
     code: [plot.js, preview.js]
     css: [views.css]

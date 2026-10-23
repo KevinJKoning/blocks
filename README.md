@@ -19,7 +19,7 @@ def train(featurize, *, alpha: Annotated[float, Range(0.0001, 10, log=True)] = 0
     return {"coef": w, "intercept": b, "train_rmse": rmse}
 
 
-def view(out):                            # optional: how its Results look
+def view(out):                            # optional: how its results look
     return [ui.metrics(), ui.chart(...)]
 ```
 
@@ -27,8 +27,9 @@ def view(out):                            # optional: how its Results look
   nodes, datasets), keyword-only parameters are settings. No dvc.yaml, no params.yaml.
 - **Reactive and cached**: changing `alpha` re-runs `train` and what reads it, in
   milliseconds; everything else comes from the cache. Views re-render without re-running.
-- **The page is blocks**: the DAG is the table of contents; each node has a Documentation
-  tab (its docstring, data and schema, live settings, code) and a Results tab (its view).
+- **The page is blocks**: the DAG is the table of contents; each node is one page, read top
+  to bottom: its docstring, live settings, its results (its view), and its data, schema
+  and code folded away.
 - **Runs are data**: export a run, load earlier ones (a superseded version's baseline), and
   every block shows the reference's next to this run's.
 - **Verified**: `blocks build` writes the app as one file and checks, offline, that every

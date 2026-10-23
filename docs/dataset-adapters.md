@@ -154,7 +154,7 @@ window caps the output at about 1 GB. An OPFS write that comes up short (quota) 
 
 ## The data row (`app/runtime.js`, `app/modals.js`, `app/report.js`)
 
-The Data modal's row (and the dataset's card in the Documentation of the node that reads it) shows, for a format dataset:
+The Data modal's row (and the dataset's card on the page of the node that reads it) shows, for a format dataset:
 
 - before: `needed: parcels.gdb.zip (116.4 KB), a zipped file geodatabase; its Parcels feature class is converted to GeoParquet in your browser (2,000 features), about 12 s` (the text after the file comes from `describe`);
 - during: a progress bar, the phase (`Starting the converter`, `Reading the file's index`, `Loading the converter's packages (fiona, pyarrow)`, `Opening the data`, `Converting 412,000 of 820,000 features`), the time left, and **Cancel**;

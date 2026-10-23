@@ -15,7 +15,7 @@ There is no built-in "baseline" in the page; a baseline is just a run file named
 | `made`, `code_sha`, `runtime` | when, from which code (compute, helpers, data, packages), on which Pyodide/Python/packages |
 | `settings`, `changed_settings` | every setting (`node.param`), and those that differ from the defaults |
 | `data` | per dataset: `{original: true, sha256}` or `{original: false, file}` |
-| `nodes` | per node: `status`, `seconds`, `metrics` (its declared metrics and every number its output holds), `digest` (a hash over its output's value), `blocks` (its Results) |
+| `nodes` | per node: `status`, `seconds`, `metrics` (its declared metrics and every number its output holds), `digest` (a hash over its output's value), `blocks` (its results) |
 | `headline` | the headline metrics, `{node:key: value}` |
 
 A run file holds blocks, not outputs: outputs can be large, and the blocks are what a viewer
@@ -30,7 +30,7 @@ sees. Non-finite numbers are written as `"NaN"` / `"Infinity"` strings.
 - **The reference.** This run is compared with one previous run: the one picked in the
   Data modal, else the one named `baseline`, else the latest.
 - **After a run**, a block of this run shows the reference's block with the same node and
-  id (`docs/blocks.md`); a node's Results say what changed and can switch to the
+  id (`docs/blocks.md`); a node's results say what changed and can switch to the
   reference's blocks; the overview shows the headline against it and the trend.
 - **Agents**: `export_run`, `add_run`, `remove_run`, `set_reference`, `show_reference`,
   `get_overview().previous_runs`, `get_node().reference_metrics`.
