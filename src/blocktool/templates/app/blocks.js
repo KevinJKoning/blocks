@@ -42,8 +42,7 @@ const BLOCKS = {
   contents: (b) => contentsList(b.nodes),
   // the overview's and a group's, made from this session's state
   headline: () => headline.length ? headlineTable() : null,
-  changes: () => reference() ? changesLine(reference()) : null,
-  trend: () => state.prev.length ? trendTable() : null,
+  changes: () => reference() && state.cmp ? changesLine(reference()) : null,
   runs: () => runsTable(),
   nodes: (b) => nodesTable(b.nodes),
   // a block of a node's results, shown on another page (app.yaml overview:)
@@ -60,59 +59,58 @@ const tableOf = (columns, rows, total) => h("div", { class: "runs-wrap" }, h("ta
 
 // ---- metrics
 // What the node declares first; when it declares some, the other numbers its output holds
-// are folded under "Other metrics".
+// are folded under "Other metrics". Next to the reference's block, each item's cell from
+// the comparison (blocks.runs).
 function metricsTable(b, ref, ctx) {
   if (!b.items.length) return h("p", { class: "muted small" }, "No metrics.");
-  const refVal = (it) => ref ? ((ref.items || []).find((x) => x.key === it.key) || {}).value : undefined;
   const table = (items) => h("table", { class: "kv metrics" }, h("thead", {}, h("tr", {}, h("th", {}, "metric"),
     h("th", { class: "num" }, ctx.side === "reference" ? reference().name : "this run"),
     ref ? [h("th", { class: "num" }, runLabel_(reference())), h("th", { class: "num" }, "Δ")] : null)),
-    h("tbody", {}, items.map((it) => { const r = refVal(it);
+    h("tbody", {}, items.map((it) => { const c = ref ? blockCell(ctx.node, b.id, it.key) : null;
       return h("tr", { "data-metric": it.key, class: it.undeclared ? "undeclared" : null },
         h("td", { title: it.key }, it.label), h("td", { class: "num" }, fmt(it.value)),
-        ref ? [h("td", { class: "num" }, fmt(r)), deltaCell(it, it.value, r)] : null); })));
+        ref ? [h("td", { class: "num" }, fmt(c ? c.ref : undefined)), deltaCell(c)] : null); })));
   const main = b.items.filter((it) => !it.undeclared), rest = b.items.filter((it) => it.undeclared);
   if (!main.length || !rest.length) return table(b.items);
   return [table(main), h("details", { class: "fold" }, h("summary", {}, `Other metrics (${rest.length})`), table(rest))];
 }
-// Δ between this run's value and a previous run's, coloured by the metric's goal when it has one.
-function deltaCell(m, v, b) {
-  if (typeof v !== "number" || typeof b !== "number") return h("td", { class: "num" }, "");
-  if (!differs(v, b)) return h("td", { class: "num delta same" }, "=");
-  return h("td", { class: `num delta ${m.goal ? (better(m, v, b) ? "better" : "worse") : "changed"}` }, signed(v - b));
+// A comparison cell (blocks.runs.cell) as Δ: "=" within the tolerance, else the change,
+// coloured better or worse by the metric's goal when it has one.
+function deltaCell(c) {
+  if (!c || (!c.differs && c.delta === null)) return h("td", { class: "num" }, "");
+  if (!c.differs) return h("td", { class: "num delta same" }, "=");
+  if (c.delta === null) return h("td", { class: "num delta changed" }, "≠");
+  return h("td", { class: `num delta ${c.better === null ? "changed" : c.better ? "better" : "worse"}` }, signed(c.delta));
 }
 function headlineTable() {
-  const now = headlineNow(), r = reference(), ref = r ? r.doc.headline || {} : {};
+  const now = headlineNow(), r = reference();
   return h("table", { class: "kv headline" }, h("thead", {}, h("tr", {}, h("th", {}, "headline"), h("th", { class: "num" }, "this run"),
     r ? [h("th", { class: "num" }, runLabel_(r)), h("th", { class: "num" }, "Δ")] : null, h("th", { class: "num" }, "goal"))),
-    h("tbody", {}, headline.map((m) => h("tr", { "data-headline": m.id }, h("td", {}, m.label), h("td", { class: "num" }, fmt(now[m.id])),
-      r ? [h("td", { class: "num" }, fmt(ref[m.id])), deltaCell(m, now[m.id], ref[m.id])] : null, h("td", { class: "num small muted" }, m.goal)))));
+    h("tbody", {}, headline.map((m) => { const c = headlineCell(m.id);
+      return h("tr", { "data-headline": m.id }, h("td", {}, m.label), h("td", { class: "num" }, fmt(now[m.id])),
+        r ? [h("td", { class: "num" }, fmt(c ? c.ref : (r.doc.headline || {})[m.id])), deltaCell(c)] : null, h("td", { class: "num small muted" }, m.goal)); })));
 }
-// Headline metrics of the previous runs, oldest first, then this run.
-function trendTable() {
-  const rows = [...state.prev].sort((a, b) => String(a.doc.made).localeCompare(String(b.doc.made)))
-    .map((r) => ({ label: runLabel_(r), made: r.doc.made, headline: r.doc.headline || {}, ref: r === reference() }))
-    .concat([{ label: "this run", made: state.lastRunAt && new Date(state.lastRunAt).toISOString(), headline: headlineNow(), now: true }]);
-  return h("div", { class: "runs-wrap" }, h("table", { class: "kv runs trend" },
-    h("thead", {}, h("tr", {}, h("th", {}, "run"), h("th", {}, "made"), headline.map((m) => h("th", { class: "num", title: `${m.id} (${m.goal})` }, m.label)))),
-    h("tbody", {}, rows.map((r) => h("tr", { class: r.now ? "now" : null },
-      h("td", { class: "small mono" }, r.label, r.ref ? h("span", { class: "muted" }, " · reference") : null),
-      h("td", { class: "small" }, String(r.made || "").slice(0, 16).replace("T", " ")),
-      headline.map((m) => h("td", { class: "num" }, fmt(r.headline[m.id]))))))));
-}
+// Every run, newest first: where it comes from, what differs from the reference, its
+// headline metrics (the best of each marked), and a button to set its settings. The
+// comparisons are the worker's (blocks.runs.summarize).
+const RUN_FROM = { session: "this session", log: "run log", app: "shipped with the app", file: "loaded file" };
 function runsTable() {
-  if (!state.runs.length) return h("p", { class: "small muted" }, "No runs yet. Every run that computes something is logged here", linked ? " (and in runs.jsonl on the dev server)." : ".");
-  const best = bestRuns();
+  if (!state.runs.length) return h("p", { class: "small muted" }, "No runs yet. Every run that computes something is kept here", linked ? " (and in runs.jsonl on the dev server)." : ".");
+  const sum = state.summary || { rows: [], best: {} }, ref = reference();
+  const rowOf = Object.fromEntries(sum.rows.map((r) => [r.name, r]));
+  const runs = [...state.runs].sort((a, b) => String(b.doc.made).localeCompare(String(a.doc.made)));
   return h("div", { class: "runs-wrap" }, h("table", { class: "kv runs" },
-    h("thead", {}, h("tr", {}, h("th", {}, "run"), h("th", {}, "changed"), headline.map((m) => h("th", { class: "num", title: `${m.id} (${m.goal})` }, m.label)), h("th", { class: "num" }, "time"), h("th", {}, ""))),
-    h("tbody", {}, [...state.runs].reverse().slice(0, 200).map((r) => h("tr", { "data-run": r.id },
-      h("td", { class: "small" }, h("span", { class: "mono" }, r.id.slice(-5)), h("div", { class: "muted" }, r.source)),
-      h("td", { class: "small mono" }, Object.keys(r.settings).length || Object.keys(r.data || {}).length
-        ? [...Object.entries(r.settings).map(([k, v]) => `${k}=${fmt(v)}`), ...Object.entries(r.data || {}).map(([k, v]) => `${k}←${v}`)].join(" ") : h("span", { class: "muted" }, "defaults")),
-      headline.map((m) => h("td", { class: `num${best[m.id] && best[m.id].id === r.id ? " best" : ""}` }, fmt(r.headline[m.id]))),
-      h("td", { class: "num" }, fmtSec(r.seconds)),
-      h("td", {}, h("button", { class: "btn link", title: "Set these settings", onclick: () => applyRun(r.id) }, "apply")))))),
-    linked ? null : h("button", { class: "btn", onclick: () => download(`${manifest.name}-runs.json`, JSON.stringify(state.runs, null, 1), "application/json") }, "Export runs (.json)"));
+    h("thead", {}, h("tr", {}, h("th", {}, "run"), h("th", {}, ref ? `changed from ${ref.name}` : "changed"),
+      headline.map((m) => h("th", { class: "num", title: `${m.id} (${m.goal})` }, m.label)), h("th", { class: "num" }, "time"), h("th", {}, ""))),
+    h("tbody", {}, runs.slice(0, 200).map((r) => { const row = rowOf[r.name] || { changes: [] };
+      return h("tr", { "data-run": r.name, class: r === ref ? "reference" : null },
+        h("td", { class: "small" }, h("span", { class: "mono" }, r.name), h("div", { class: "muted" }, RUN_FROM[r.from] || r.from, r === ref ? " · reference" : "")),
+        h("td", { class: "small mono" }, r === ref ? "" : row.changes.length ? row.changes.map(changeText).join("; ") : h("span", { class: "muted" }, "nothing")),
+        headline.map((m) => h("td", { class: `num${sum.best[m.id] === r.name ? " best" : ""}` }, fmt((r.doc.headline || {})[m.id]))),
+        h("td", { class: "num" }, fmtSec(r.doc.seconds)),
+        h("td", {}, h("button", { class: "btn link", title: "Set these settings", onclick: () => applyRun(r.name) }, "apply"))); }))),
+    linked ? null : h("button", { class: "btn", onclick: () => download(`${manifest.name}-runs.json`,
+      JSON.stringify(state.runs.filter((r) => r.from === "session").map((r) => r.doc), null, 1), "application/json") }, "Export this session's runs (.json)"));
 }
 function nodesTable(names) {
   return h("table", { class: "kv group-results" }, h("thead", {}, h("tr", {}, h("th", {}, "node"), h("th", {}, "state"), h("th", {}, "metrics"))),

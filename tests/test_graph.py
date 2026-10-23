@@ -1,10 +1,11 @@
-"""The blocks library natively: the graph executor (caching by key, failures, views) and
-UI blocks, on toy nodes in plain Python. (Real apps' nodes run only in Pyodide.)"""
+"""The blocks library natively: the graph executor (caching by key, failures, views), run
+files and comparing them, and UI blocks, on toy nodes in plain Python. (Real apps' nodes
+run only in Pyodide.)"""
 import json
 
 import pytest
 
-from blocks import graph as graph_mod, schema, ui
+from blocks import graph as graph_mod, runs, schema, ui
 from blocks.session import Session
 
 NODES = {
@@ -20,10 +21,13 @@ SPEC = {
     "nodes": {
         "numbers": {"file": "nodes/numbers.py", "deps": [], "settings": {"n": {"default": 3}}, "metrics": [], "view": False},
         "total": {"file": "nodes/total.py", "deps": [{"name": "numbers", "kind": "node"}], "settings": {"scale": {"default": 1}},
-                  "metrics": [{"key": "total", "label": "total", "goal": "max", "headline": True}], "view": True},
+                  "metrics": [{"id": "total:total", "key": "total", "label": "total", "goal": "max", "headline": True}], "view": True},
         "square": {"file": "nodes/square.py", "deps": [{"name": "numbers", "kind": "node"}], "settings": {}, "metrics": [], "view": False},
     },
+    "app": {"id": "toy", "project": "toy", "title": "Toy", "code_sha": "c0de", "runtime": {"pyodide": "0"}},
+    "verify": {"rel_tol": 1e-9, "abs_tol": 1e-12},
 }
+DATA = {}
 
 
 @pytest.fixture
@@ -78,8 +82,47 @@ def test_a_failure_blocks_what_depends_on_it_and_a_failing_view_does_not_fail_th
 def test_the_session_speaks_json(app):
     s = Session(str(app), json.dumps(SPEC))
     out = json.loads(s.run(json.dumps({"numbers.n": 2}), "{}"))
-    assert out["total"]["metrics"]["total"] == 3
+    assert out["nodes"]["total"]["metrics"]["total"] == 3
     assert json.loads(s.output("total")) == {"total": 3, "count": 2}
+    rec = out["record"]                          # every run makes its run file
+    assert rec["format"] == runs.FORMAT and rec["complete"] and rec["ran"] == ["numbers", "total", "square"]
+    assert rec["settings"] == {"numbers.n": 2, "total.scale": 1} and rec["changed_settings"] == {"numbers.n": 2}
+    assert rec["headline"] == {"total:total": 3} and rec["app"] == "toy"
+    again = json.loads(s.run(json.dumps({"numbers.n": 2}), "{}"))["record"]
+    assert again["ran"] == [] and again["nodes"]["total"]["digest"] == rec["nodes"]["total"]["digest"]
+    c = json.loads(s.compare(json.dumps(again), json.dumps(rec)))
+    assert c["verified"] == "match" and c["changes"] == []
+
+
+def run_file(app, settings):
+    g = graph_mod.Graph(str(app), SPEC)
+    return runs.record(SPEC, g.run(settings, {}), settings, DATA)
+
+
+def test_one_rule_compares_runs(app):
+    ref, run = run_file(app, {}), run_file(app, {"total.scale": 2, "numbers.n": 2})
+    c = runs.compare(run, ref, SPEC, SPEC["verify"])
+    assert c["nodes"]["numbers"]["verdict"] == "differs"                  # its output's digest
+    t = c["nodes"]["total"]
+    assert t["verdict"] == "differs" and t["metrics"]["total"] == {"value": 6, "ref": 6, "delta": 0, "differs": False, "better": None}
+    assert t["metrics"]["count"]["delta"] == -1 and t["blocks"]["metrics"]["count"]["differs"]   # a metrics block, by id
+    assert c["changes"] == [{"kind": "setting", "key": "numbers.n", "from": 3, "to": 2},
+                            {"kind": "setting", "key": "total.scale", "from": 1, "to": 2}]
+    assert c["headline"]["total:total"]["delta"] == 0
+    better = runs.record(SPEC, {**{n: {"status": "done", "metrics": {}} for n in SPEC["order"]},
+                                "total": {"status": "done", "metrics": {"total": 9}}}, {}, DATA)
+    assert runs.compare(better, ref, SPEC, SPEC["verify"])["headline"]["total:total"]["better"] is True   # goal: max
+    assert runs.compare(None, ref, SPEC, SPEC["verify"])["verified"] == "error"
+    assert runs.compare(ref, None, SPEC, SPEC["verify"])["verified"] == "no-baseline"
+    s = runs.summarize([ref, better], ref, SPEC, SPEC["verify"])
+    assert s["best"] == {"total:total": better["name"]} and s["rows"][1]["headline"]["total:total"]["better"]
+
+
+def test_data_is_the_same_when_its_key_is():
+    a = {"settings": {}, "data": {"m": {"key": "k1", "original": True}}}
+    assert runs.changes(dict(a, data={"m": {"key": "k1", "original": False, "file": "copy.parquet"}}), a) == []
+    assert runs.changes(dict(a, data={"m": {"key": "k2", "original": False, "file": "other.parquet"}}), a) == [
+        {"kind": "data", "key": "m", "from": "original", "to": "other.parquet"}]
 
 
 def test_ui_blocks_are_plain_data():

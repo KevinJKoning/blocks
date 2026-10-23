@@ -1,9 +1,14 @@
 # Runs as data
 
-A run is something a viewer makes, keeps, and brings back: the app exports a run as a file
-(Download run), and loads any number of earlier runs like any other data, to compare with.
+A run is something a viewer makes, keeps, and brings back: every run is a run file, and
+the page keeps a list of them (this session's, earlier ones, loaded ones) to compare with.
 There is no built-in "baseline" in the page; a baseline is just a run file named
-`baseline`. Comparing results is a feature of each app, not of the repo.
+`baseline`.
+
+**One record, one rule** (`blocks/runs.py`, in the runtime library): `record` makes the run
+file of a run, `compare` compares two, `summarize` compares many with a reference. The
+page's worker calls them after every run; the tooling verifies with the same `compare`.
+Nothing else makes or compares runs.
 
 ## The run file (`blocks-run/1`)
 
@@ -13,35 +18,41 @@ There is no built-in "baseline" in the page; a baseline is just a run file named
 | `name` | its date and time (`2026-10-23T01-31-05`), unless given one |
 | `app`, `project`, `title` | which app made it: `project`, or `project/name` for a superseded version |
 | `made`, `code_sha`, `runtime` | when, from which code (compute, helpers, data, packages), on which Pyodide/Python/packages |
+| `source`, `ran`, `seconds`, `complete` | who ran it (`ui`, `agent`, `sweep`), the nodes it computed (the rest came from the cache), their seconds, whether every node is done |
 | `settings`, `changed_settings` | every setting (`node.param`), and those that differ from the defaults |
-| `data` | per dataset: `{original: true, sha256}` or `{original: false, file}` |
+| `data` | per dataset: `{key, original, file}`. `key` identifies the bytes: the recorded sha256, a swapped file's sha256, or a format adapter's fingerprint; the graph's cache uses the same key, so two runs read the same data exactly when their keys are equal |
 | `nodes` | per node: `status`, `seconds`, `metrics` (its declared metrics and every number its output holds), `digest` (a hash over its output's value), `blocks` (its results) |
 | `headline` | the headline metrics, `{node:key: value}` |
 
 A run file holds blocks, not outputs: outputs can be large, and the blocks are what a viewer
 sees. Non-finite numbers are written as `"NaN"` / `"Infinity"` strings.
 
+## Comparing (`compare`)
+
+Per node: each of the reference's metrics as a cell (`value`, `ref`, `delta`, `differs`
+beyond the app's tolerance, `better` by the metric's goal), each metrics block's items by
+block id, and a verdict: `match` (every metric within tolerance and the same output digest),
+`differs`, `no-baseline` (the reference has no result for it) or `error` (it did not run).
+Also the headline's cells, and what differs between the runs' inputs (`changes`: the app,
+each setting, each dataset by key).
+
 ## In the app (`app/runs.js`)
 
-- **Loading.** The Data modal's Previous runs adds run files, each named after its file.
-  Runs of another project are refused. An app may ship runs (`app.yaml runs:`): its own
-  (`baseline.run.json` → "baseline") and its superseded versions'
-  (`superseded/older/baseline.run.json` → "older/baseline").
-- **The reference.** This run is compared with one previous run: the one picked in the
-  Data modal, else the one named `baseline`, else the latest.
+- **One list.** `state.runs` holds every run file the page knows, each with where it comes
+  from: this session (every run that computed something and completed), the dev server's
+  run log (`runs.jsonl`, linked builds), the app (`app.yaml runs:`: its own
+  `baseline.run.json` → "baseline", a superseded version's
+  `superseded/older/baseline.run.json` → "older/baseline"), and files loaded in the Data
+  modal. Runs of another project are refused.
+- **The reference.** This run is compared with one run: the one picked, else the one named
+  `baseline`, else the latest that is not this session's.
 - **After a run**, a block of this run shows the reference's block with the same node and
   id (`docs/blocks.md`); a node's results say what changed and can switch to the
-  reference's blocks; the overview shows the headline against it and the trend.
-- **Agents**: `export_run`, `add_run`, `remove_run`, `set_reference`, `show_reference`,
-  `get_overview().previous_runs`, `get_node().reference_metrics`.
+  reference's blocks; the overview shows the headline against it and every run.
+- **Agents**: `list_runs`, `apply_run`, `sweep`, `export_run`, `add_run`, `remove_run`,
+  `set_reference`, `show_reference`, `get_overview().changes`, `get_node().comparison`.
 
-## The run log
-
-Every run that computed something is logged: the changed settings, swapped data, headline,
-which nodes computed, seconds. Linked apps also POST it to the dev server (`runs.jsonl` in
-the app's directory); `list_runs`, `apply_run` and `sweep` work from it.
-
-## Verification (tooling only, `verify.py`)
+## Verification (tooling only, with `blocks.runs.compare`)
 
 The page never says whether a run "matches": a viewer compares runs; making an app
 verifies it.

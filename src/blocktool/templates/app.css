@@ -314,10 +314,8 @@ table.schema-fields tr.bad td:first-child .mono { color: var(--err); }
 .compare .btn.on { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
 .delta.changed { color: var(--accent); } .delta.same { color: var(--faint); }
 .delta.better { color: var(--ok); } .delta.worse { color: var(--err); }
-table.trend tr.now td { font-weight: 600; }
+table.runs tr.reference td { font-weight: 600; }
 
-/* the Auto switch next to Run, and settings shown live on a node's page */
-.cap.auto { gap: 6px; padding: 0 12px; font-weight: 500; cursor: pointer; }
-.cap.auto input { margin: 0; accent-color: var(--accent); }
+/* settings shown live on a node's page */
 .settings-inline .param:last-child { border-bottom: 0; }
 .block-pick > div > h3 { margin-top: 0; }

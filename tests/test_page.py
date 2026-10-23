@@ -12,6 +12,7 @@ from conftest import SENSOR, edit_yaml, tool
 
 pytestmark = pytest.mark.browser
 VIEWS = f"projects/{SENSOR}/plugins/calibration-views"
+SESSION = "window.blocksApp.state.runs.filter((r) => r.from === 'session')"
 
 
 def app_url(server, harvest_run=True):
@@ -39,7 +40,7 @@ def test_before_a_run_the_app_describes_itself(server, open_app):
     page = open_app(app_url(server))
     assert open_modal(page) is None
     assert page.locator('[data-action="download-run"]').is_disabled()
-    assert page.locator('[data-action="auto"]').is_checked()
+    assert page.locator('[data-action="auto"]').count() == 0                      # nothing runs until Run
     assert {page.locator(".dag .node").nth(i).get_attribute("data-status") for i in range(5)} == {"pending"}
     ev = node_text(page, "evaluate")
     assert "○ not run" in ev and "RMSE —" in ev and "R² —" in ev
@@ -48,7 +49,8 @@ def test_before_a_run_the_app_describes_itself(server, open_app):
     assert tool(page, "get_report")["selected"] == {"kind": "overview", "name": None}
     assert page.locator(".report [role=tab]").count() == 0                       # one page, no tabs
     text = page.locator(".report").inner_text()
-    assert "Which calibration curve" in text and "HEADLINE METRICS" in text and "No runs yet" in text
+    assert "Which calibration curve" in text and "HEADLINE METRICS" in text
+    assert page.locator('.report [data-run="baseline"]').count() == 1            # the runs: the app's baseline so far
     assert "ABOUT THIS APP" in text and "CONTENTS" not in text                   # folded until opened
     page.click('.report [data-fold="about-app"] > summary')
     assert "CONTENTS" in page.locator(".report").inner_text()
@@ -84,18 +86,19 @@ def test_a_setting_in_the_report_runs_what_it_reaches(server, open_app):
     tool(page, "select", {"node": "train"})
     page.fill('.report [data-param="train.alpha"] input[type=number]', "1")
     page.press('.report [data-param="train.alpha"] input[type=number]', "Enter")
-    page.wait_for_function("() => window.blocksApp.state.runs.length === 2 && !window.blocksApp.state.busy")
-    assert page.evaluate("window.blocksApp.state.runs[1].ran") == ["train", "evaluate"]
+    page.wait_for_function("() => window.blocksApp.state.node.train.status === 'stale'")
+    page.click('[data-action="run"]')
+    page.wait_for_function(f"() => {SESSION}.length === 2 && !window.blocksApp.state.busy")
+    assert page.evaluate(f"{SESSION}[1].doc.ran") == ["train", "evaluate"]
     assert "train RMSE 0.3798" in node_text(page, "train")
-    # the setting and what it changed are on one page, and the control keeps its focus
+    # the setting and what it changed are on one page
     assert re.search(r"train RMSE\s+0\.3798", page.locator('.report [data-block="results"]').inner_text())
-    assert page.evaluate("document.activeElement.closest('[data-param]')?.dataset.param") == "train.alpha"
 
 
 def test_results_are_each_nodes_blocks(server, open_app):
     page = open_app(app_url(server, harvest_run=False))
     page.click('[data-action="run"]')
-    page.wait_for_function("() => window.blocksApp.state.runs.length === 1 && !window.blocksApp.state.busy")
+    page.wait_for_function(f"() => {SESSION}.length === 1 && !window.blocksApp.state.busy")
     text = page.locator(".report").inner_text()
     assert "HEADLINE METRICS" in text and re.search(r"RMSE\s+0\.3565", text)
     assert page.locator('.report [data-block="pick"] [data-plot="curve"] svg.chart').count() == 1   # a block from evaluate's view

@@ -68,8 +68,8 @@ function renderSettings(top, rest, m) {
 function graphSettings(top, rest, m) {
   const withSettings = order.filter((n) => nodeSettings(n).length);
   if (!withSettings.length) { put(top, h("p", { class: "small muted" }, "No node has settings (keyword-only parameters).")); m.note.textContent = ""; return; }
-  put(top, h("p", { class: "small muted" }, "A node's settings are its keyword-only parameters. Changing one runs that node and what depends on it again" +
-    " (at once while Auto is on)."));
+  put(top, h("p", { class: "small muted" }, "A node's settings are its keyword-only parameters. Changing one makes that node and what depends on it stale;" +
+    " Run runs them again."));
   for (const n of withSettings) put(top, h("section", { class: "settings-group", "data-node-group": n },
     h("h3", {}, n), nodes[n].desc ? h("p", { class: "small muted" }, nodes[n].desc) : null, nodeSettings(n).map(paramControl)));
   const changed = Object.keys(changedSettings()).length;
@@ -180,8 +180,8 @@ function previousRuns() {
     "Each is named after its file; rename one to baseline.run.json to make it the baseline. After a run, this run is compared with the reference.");
   const ref = reference();
   return h("div", { "data-previous-runs": "" }, note,
-    state.prev.length ? h("table", { class: "kv runs-prev" }, h("thead", {}, h("tr", {}, h("th", {}, "reference"), h("th", {}, "run"), h("th", {}, "app"), h("th", {}, "made"), h("th", {}, ""))),
-      h("tbody", {}, state.prev.map((r) => h("tr", { "data-run-file": r.name },
+    loaded().length ? h("table", { class: "kv runs-prev" }, h("thead", {}, h("tr", {}, h("th", {}, "reference"), h("th", {}, "run"), h("th", {}, "app"), h("th", {}, "made"), h("th", {}, ""))),
+      h("tbody", {}, loaded().map((r) => h("tr", { "data-run-file": r.name },
         h("td", {}, h("input", { type: "radio", name: "reference", checked: ref === r, "aria-label": `Compare with ${r.name}`, onchange: () => setReference(r.name) })),
         h("td", { class: "mono" }, r.name, r.from === "app" ? h("span", { class: "muted" }, " · shipped with the app") : null),
         h("td", { class: "small" }, sameApp(r) ? "this app" : r.doc.app),

@@ -32,7 +32,7 @@ function viewSnapshot() {
   return { nodes: Object.fromEntries(order.map((n) => [n, { status: state.node[n].status, cached: !!state.node[n].cached,
       shown: shownSide(n), compare: comparable(n), metrics: (shownRecord(n) || {}).metrics || {} }])),
     reference: r && r.name,
-    runs: state.prev.map((x) => ({ name: x.name, app: x.doc.app, made: x.doc.made, headline: x.doc.headline || {}, settings: x.doc.settings || {} })),
+    runs: loaded().map((x) => ({ name: x.name, app: x.doc.app, made: x.doc.made, headline: x.doc.headline || {}, settings: x.doc.settings || {} })),
     data: Object.fromEntries(manifest.datasets.map((d) => { const x = state.data[d.name] || {};
       const c = x.check && x.check.status === "done" ? { ok: x.check.result.ok, problems: schemaProblems(x.check.result) } : x.check ? { status: x.check.status } : null;
       return [d.name, { status: x.status || "waiting", original: x.original ?? null, file: x.file || null, path: d.at, profile: x.profile || null, schema: c }]; })),

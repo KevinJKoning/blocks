@@ -14,7 +14,9 @@ import time
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
-from . import spec, verify
+from blocks import runs
+
+from . import spec
 from .runtime import Runtime
 
 TIMEOUT_S = 1800
@@ -119,9 +121,10 @@ def app_url(base: str, project: str, version: str | None = None) -> str:
 
 
 def results(a: dict, res: dict, rt: Runtime) -> dict:
-    """What a headless run says: the run, verified against the app's recorded baseline (verify.py)."""
+    """What a headless run says: the run, verified against the app's recorded baseline with
+    the one rule that compares runs (blocks.runs.compare)."""
     run = res.get("run_file") or {}
-    check = verify.compare_runs(run if res.get("ok") and not res.get("fatal") else None, a["baseline"], a["verify"])
+    check = runs.compare(run if res.get("ok") and not res.get("fatal") else None, a["baseline"], a["graph"], a["verify"])
     nodes = {n: {"verdict": check["nodes"].get(n, {}).get("verdict", "error"),
                  "mismatches": check["nodes"].get(n, {}).get("mismatches", []),
                  "seconds": ((run.get("nodes") or {}).get(n) or {}).get("seconds"),

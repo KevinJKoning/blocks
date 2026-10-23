@@ -53,8 +53,8 @@ inputs (a dataset's key is its fingerprint). So:
 - a node whose key did not change comes from the cache;
 - a view is rendered from the cached output, so it never re-runs the node.
 
-With **Auto** on (the default), a change runs what it reaches at once; Run runs what is
-stale, or, when everything is current, every node again. A failing node is reported with
+Nothing runs by itself: a change makes what it reaches stale, and Run runs what is stale,
+or, when everything is current, every node again. A failing node is reported with
 its traceback, and what depends on it is blocked; a failing view is reported in the node's
 results without failing the node.
 

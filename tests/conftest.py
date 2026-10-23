@@ -74,9 +74,10 @@ def tool(page, name: str, args: dict | None = None):
 def verified(page, repo: Path, app_id: str) -> str:
     """What `blocks run` concludes about the page's last run: its run file against the app's
     recorded baseline (verification is the tooling's, never the page's)."""
-    from blocktool import spec, verify
+    from blocks import runs
+    from blocktool import spec
     a = spec.load_app(repo, *spec.parse_target(app_id))
-    return verify.compare_runs(tool(page, "export_run")["run"], a["baseline"], a["verify"])["verified"]
+    return runs.compare(tool(page, "export_run")["run"], a["baseline"], a["graph"], a["verify"])["verified"]
 
 
 def fetch(url: str, data: bytes | None = None, headers: dict | None = None):

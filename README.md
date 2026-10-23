@@ -25,8 +25,8 @@ def view(out):                            # optional: how its results look
 
 - **The graph is the functions' signatures**: positional parameters are inputs (other
   nodes, datasets), keyword-only parameters are settings. No dvc.yaml, no params.yaml.
-- **Reactive and cached**: changing `alpha` re-runs `train` and what reads it, in
-  milliseconds; everything else comes from the cache. Views re-render without re-running.
+- **Cached**: changing `alpha` makes `train` and what reads it stale; Run re-runs just
+  those, everything else comes from the cache. Views re-render without re-running.
 - **The page is blocks**: the DAG is the table of contents; each node is one page, read top
   to bottom: its docstring, live settings, its results (its view), and its data, schema
   and code folded away.

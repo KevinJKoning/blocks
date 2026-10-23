@@ -4,17 +4,27 @@
  "app": "sensor-calibration",
  "project": "sensor-calibration",
  "title": "Sensor calibration",
- "made": "2026-10-23T01:34:09.647Z",
+ "made": "2026-10-23T12:22:13.003Z",
  "code_sha": "e0eeefe9ce47820136449c1078db403f39bb76857412d8e81ca605fafa09d954",
  "runtime": {
   "pyodide": "314.0.7",
-  "python": "3.14.2",
   "packages": {
    "duckdb": "1.5.1",
    "numpy": "2.4.6",
    "pyyaml": "6.0.3"
-  }
+  },
+  "python": "3.14.2"
  },
+ "source": "harvest",
+ "ran": [
+  "prepare",
+  "baseline",
+  "featurize",
+  "train",
+  "evaluate"
+ ],
+ "seconds": 0.2823,
+ "complete": true,
  "settings": {
   "prepare.test_fraction": 0.25,
   "prepare.seed": 42,
@@ -25,14 +35,14 @@
  "changed_settings": {},
  "data": {
   "measurements": {
-   "original": true,
-   "sha256": "4507dc9541fdd8aa377ab2dd68f5ed27dc888ef832c94994e842fb65686ca7b6"
+   "key": "4507dc9541fdd8aa377ab2dd68f5ed27dc888ef832c94994e842fb65686ca7b6",
+   "original": true
   }
  },
  "nodes": {
   "prepare": {
    "status": "done",
-   "seconds": 0.2634,
+   "seconds": 0.2787,
    "metrics": {
     "n_raw": 400,
     "n_missing": 8,
@@ -1343,7 +1353,7 @@
   },
   "baseline": {
    "status": "done",
-   "seconds": 0.0006,
+   "seconds": 0.0005,
    "metrics": {
     "baseline_rmse": 0.6941426542401036,
     "slope": 1.4186827644842057,
@@ -1381,7 +1391,7 @@
   },
   "featurize": {
    "status": "done",
-   "seconds": 0.0011,
+   "seconds": 0.0019,
    "metrics": {
     "n_features": 3,
     "condition_number": 52.280296965319835
@@ -1413,7 +1423,7 @@
   },
   "train": {
    "status": "done",
-   "seconds": 0.0006,
+   "seconds": 0.0007,
    "metrics": {
     "intercept": 7.7335348275862055,
     "train_rmse": 0.3323270988337437
@@ -1444,7 +1454,7 @@
   },
   "evaluate": {
    "status": "done",
-   "seconds": 0.0006,
+   "seconds": 0.0005,
    "metrics": {
     "test_rmse": 0.35649534617614814,
     "rmse_vs_baseline": 0.51357648748212,

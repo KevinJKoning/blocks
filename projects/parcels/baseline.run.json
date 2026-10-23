@@ -4,11 +4,10 @@
  "app": "parcels",
  "project": "parcels",
  "title": "Parcel land use",
- "made": "2026-10-23T01:34:07.577Z",
+ "made": "2026-10-23T12:22:10.744Z",
  "code_sha": "6a514e4a4a8db8b2db3b747d3fa00cbbee25374a72111edbb2c2558baa624eb1",
  "runtime": {
   "pyodide": "314.0.7",
-  "python": "3.14.2",
   "packages": {
    "duckdb": "1.5.1",
    "numpy": "2.4.6",
@@ -20,22 +19,30 @@
    "pyyaml": "6.0.3",
    "shapely": "2.1.2",
    "six": "1.17.0"
-  }
+  },
+  "python": "3.14.2"
  },
+ "source": "harvest",
+ "ran": [
+  "areas",
+  "summary"
+ ],
+ "seconds": 1.5085,
+ "complete": true,
  "settings": {
   "areas.min_area_m2": 1000
  },
  "changed_settings": {},
  "data": {
   "parcels": {
-   "original": true,
-   "sha256": "d71aa4b412a0b7b95532593f23796d8eea9efff2267ee32df77a839f133dba17"
+   "key": "d71aa4b412a0b7b95532593f23796d8eea9efff2267ee32df77a839f133dba17",
+   "original": true
   }
  },
  "nodes": {
   "areas": {
    "status": "done",
-   "seconds": 1.4086,
+   "seconds": 1.5051,
    "metrics": {
     "parcels": 2000,
     "slivers_dropped": 0,
@@ -200,7 +207,7 @@
   },
   "summary": {
    "status": "done",
-   "seconds": 0.0033,
+   "seconds": 0.0034,
    "metrics": {
     "total_area_ha": 916.0770826574048,
     "residential_area_share": 0.5160514163739623,

@@ -2,9 +2,9 @@
 // blocks on top: the page is the graph as a DAG next to a report, and the DAG is the
 // report's table of contents (the overview, each group, each node). A node's page is its
 // docstring, its settings as live controls, its results (the blocks its view made of its
-// output), and a fold with its data and schema, its links and its code. Settings change
-// the graph reactively: only the nodes downstream of a change run again, and a
-// view re-renders from cached outputs. An app's own plugins add sandboxed views
+// output), and a fold with its data and schema, its links and its code. A change of
+// settings or data makes what it reaches stale; Run runs only that again (the rest comes
+// from the cache), and a view re-renders from cached outputs. An app's own plugins add sandboxed views
 // (views.js), never code in this page.
 //
 // The files in this directory are one script: build.app_script() concatenates them, in the
@@ -89,7 +89,6 @@ const graph = jsonOf("proto/graph.json");
 const order = graph.order;
 const nodes = graph.nodes;
 const settingSpec = manifest.settings || {};          // "node.param" -> {default, type, min, max, step, scale, choices, note}
-const tol = manifest.verify;
 const defaults = Object.fromEntries(Object.entries(settingSpec).map(([k, v]) => [k, v.default]));
 const datasets = Object.fromEntries(manifest.datasets.map((d) => [d.name, d]));
 const groups = manifest.groups || {};
@@ -100,11 +99,9 @@ const state = {
   settings: { ...defaults },
   data: {},             // dataset name -> {status: waiting|loading|mounted|error, original, file, size, note, profile, check}
   node: Object.fromEntries(order.map((n) => [n, { status: "pending" }])),
-  runs: [],
   // What the report shows: the app's overview, a group or a node; which of its folds are open.
   sel: { kind: "overview", name: null },
   open: {},
-  auto: true,           // run what a change makes stale as soon as it is made
   ready: false,
   busy: false,
 };
@@ -130,9 +127,6 @@ const metricDecls = manifest.metrics || [];
 const headline = metricDecls.filter((m) => m.headline);
 const declaredFor = (n) => metricDecls.filter((m) => m.node === n);
 const metricValue = (rec, m) => rec && rec.metrics ? rec.metrics[m.key] : undefined;
-const headlineOf = (recs) => Object.fromEntries(headline.map((m) => [m.id, metricValue((recs || {})[m.node], m)]));
-const headlineNow = () => headlineOf(state.node);
-const better = (m, a, b) => (m.goal === "min" ? a < b : a > b);
 
 function validate(key, value) {
   const s = settingSpec[key] || {};

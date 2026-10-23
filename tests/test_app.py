@@ -53,32 +53,33 @@ def test_a_change_recomputes_only_what_it_reaches(server, open_app):
     assert page.evaluate("Object.fromEntries(Object.entries(window.blocksApp.state.node).map(([n, s]) => [n, s.digest]))") == before
 
 
-def test_auto_runs_a_change_by_itself(server, open_app):
+def test_a_change_waits_for_run(server, open_app):
     page = open_app(url(server, harvest_run=False))
     assert tool(page, "run")["ok"]
-    assert tool(page, "get_overview")["auto"] is True
-    page.evaluate("window.blocksApp.tools.set_settings({values: {'prepare.outlier_z': 4}})")
-    page.wait_for_function("() => window.blocksApp.state.runs.length === 2 && !window.blocksApp.state.busy")
-    assert page.evaluate("window.blocksApp.state.runs[1].ran") == ["prepare", "baseline", "featurize", "train", "evaluate"]
-    tool(page, "set_auto", {"on": False})
-    tool(page, "set_settings", {"values": {"prepare.outlier_z": 5}})
+    tool(page, "set_settings", {"values": {"prepare.outlier_z": 4}})
     page.wait_for_timeout(600)
-    assert page.evaluate("window.blocksApp.state.node.prepare.status") == "stale" and page.evaluate("window.blocksApp.state.runs.length") == 2
+    assert page.evaluate("window.blocksApp.state.node.prepare.status") == "stale"
+    assert tool(page, "get_overview")["runs"] == 1                       # nothing ran by itself
+    r = tool(page, "run")
+    assert r["computed"] == ["prepare", "baseline", "featurize", "train", "evaluate"] and tool(page, "get_overview")["runs"] == 2
+    # every run is a run file, made by blocks.runs in the worker, and compared there with the reference
+    assert r["run"]["settings"] == {"prepare.outlier_z": 4} and tool(page, "get_overview")["changes"] == [
+        {"kind": "setting", "key": "prepare.outlier_z", "from": 3, "to": 4}]
 
 
 def test_explore_settings_and_log_runs(server, open_app, repo):
     page = open_app(url(server, harvest_run=False))
-    tool(page, "set_auto", {"on": False})
     assert tool(page, "set_settings", {"values": {"featurize.degree": 99}})["warnings"]
     sw = tool(page, "sweep", {"grid": {"featurize.degree": [1, 3], "train.alpha": [0.01, 1]}})
     assert len(sw["runs"]) == 4 and sw["restored"]
     assert tool(page, "get_overview")["settings"]["featurize.degree"]["value"] == 99
     runs = tool(page, "list_runs", {"sort_by": RMSE})
     best = runs["runs"][0]
-    applied = tool(page, "apply_run", {"id": best["id"], "run": True})
+    assert best["name"] == runs["best"][RMSE] and best["headline"][RMSE] == min(sw["best"][RMSE]["value"], best["headline"][RMSE])
+    applied = tool(page, "apply_run", {"name": best["name"], "run": True})
     assert applied["ok"]
     logged = [json.loads(l) for l in (spec.app_dir(repo, SENSOR) / "runs.jsonl").read_text().splitlines()]
-    assert logged and all("ran" in r for r in logged)
+    assert logged and all(r["format"] == "blocks-run/1" and r["complete"] for r in logged)   # the run log holds run files
     q = tool(page, "query_data", {"sql": "SELECT count(*) AS n FROM 'data/measurements.parquet'"})
     assert q["rows"] == [[400]]
     assert tool(page, "reset")["ok"] and tool(page, "get_overview")["at_defaults"]
@@ -92,8 +93,8 @@ def test_swapping_data(server, open_app, repo, tmp_path):
     fewer.write_bytes(harvest.duckdb_in_browser(
         repo, "COPY (SELECT * FROM 'in.parquet' LIMIT 300) TO 'out.parquet' (FORMAT parquet)", {"in.parquet": src}, "out.parquet"))
     page = open_app(url(server))
-    tool(page, "set_auto", {"on": False})
     assert tool(page, "run")["ok"]
+    key = page.evaluate("window.blocksApp.state.current.data.measurements.key")
     field = 'input[type=file][aria-label="File for measurements"]'
     wait = ("() => { const d = window.blocksApp.state.data.measurements; "
             "return d.status === 'mounted' && !String(d.note || '').startsWith('checking') && d.profile; }")
@@ -108,6 +109,7 @@ def test_swapping_data(server, open_app, repo, tmp_path):
     page.wait_for_function(wait)
     assert page.evaluate("window.blocksApp.state.data.measurements.original") is True
     assert tool(page, "run")["ok"] and verified(page, repo, SENSOR) == "match"
+    assert page.evaluate("window.blocksApp.state.current.data.measurements.key") == key    # one identity for the same bytes
 
 
 def test_large_parquet_is_read_in_place(repo, open_app):

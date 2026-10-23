@@ -6,7 +6,8 @@ import re
 
 import pytest
 
-from blocktool import build, docs, spec, verify
+from blocks import runs
+from blocktool import build, docs, spec
 from conftest import SENSOR, edit_yaml
 
 NODES = f"projects/{SENSOR}/nodes"
@@ -97,7 +98,7 @@ def test_documentation_pages_are_blocks(repo):
     assert [b["type"] for b in p["nodes"]["evaluate"]] == ["markdown", "results", "views", "fold"]  # no settings
     assert [b["type"] for b in p["groups"]["Modelling"]] == ["markdown", "nodes", "views"]
     assert [b["type"] for b in p["overview"]] == ["markdown", "markdown", "headline", "changes", "pick", "views",
-                                                   "markdown", "trend", "runs", "fold"]
+                                                   "markdown", "runs", "fold"]
     assert [b["type"] for b in p["overview"][-1]["blocks"]] == ["dataset", "contents"]
 
 
@@ -117,17 +118,18 @@ def test_builds(repo):
     assert "connect-src 'none'" in page.decode() and build.check(page) == []
 
 
-def test_compare_runs_checks_metrics_and_digests(repo):
-    base = spec.load_app(repo, SENSOR)["baseline"]
+def test_verification_compares_metrics_and_digests(repo):
+    a = spec.load_app(repo, SENSOR)
+    base, G = a["baseline"], a["graph"]
     assert base["format"] == "blocks-run/1" and base["app"] == SENSOR
     assert [b["id"] for b in base["nodes"]["evaluate"]["blocks"]] == ["metrics", "markdown-2", "curve", "residuals"]
-    assert verify.compare_runs(base, base, TOL)["verified"] == "match"
+    assert runs.compare(base, base, G, TOL)["verified"] == "match"
     run = copy.deepcopy(base)
     run["nodes"]["train"]["metrics"]["train_rmse"] += 1e-3
-    res = verify.compare_runs(run, base, TOL)
+    res = runs.compare(run, base, G, TOL)
     assert res["nodes"]["train"]["verdict"] == "differs" and res["nodes"]["evaluate"]["verdict"] == "match"
     run = copy.deepcopy(base)
     run["nodes"]["featurize"]["digest"] = "0" * 64
-    assert verify.compare_runs(run, base, TOL)["nodes"]["featurize"]["mismatches"] == [{"metric": "(output)", "expected": base["nodes"]["featurize"]["digest"], "got": "0" * 64}]
-    assert verify.compare_runs(None, base, TOL)["verified"] == "error"
-    assert verify.compare_runs(base, None, TOL)["verified"] == "no-baseline"
+    assert runs.compare(run, base, G, TOL)["nodes"]["featurize"]["mismatches"] == [{"metric": "(output)", "expected": base["nodes"]["featurize"]["digest"], "got": "0" * 64}]
+    assert runs.compare(None, base, G, TOL)["verified"] == "error"
+    assert runs.compare(base, None, G, TOL)["verified"] == "no-baseline"

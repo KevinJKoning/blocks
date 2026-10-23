@@ -1,5 +1,4 @@
-// runtime.js: the Python worker, datasets, running the graph, the run log, and this run as
-// a run file.
+// runtime.js: the Python worker, datasets, and running the graph.
 
 // ------------------------------------------------------------------ worker
 let worker = null;
@@ -82,8 +81,10 @@ async function startWorker() {
 // ------------------------------------------------------------------ datasets
 // Each dataset is a read-only WORKERFS mount in the worker. Sources: the dev server
 // (linked builds, HTTP-cached), bytes embedded in the page, or a file the viewer picks.
-// Any file dataset can be swapped for another file; a file whose sha256 matches the
-// recorded one counts as the original, anything else makes runs "modified".
+// Any file dataset can be swapped for another file. Every loaded dataset has a key that
+// identifies its bytes (state.data[name].key): the recorded sha256 for the original, a
+// swapped file's sha256, or a format adapter's fingerprint. The graph caches by it and run
+// files record it (blocks.runs), so two runs read the same data exactly when keys match.
 async function mountDataset(name, entries, info) {
   const d = datasets[name];
   state.data[name] = { ...info, status: "loading" };
@@ -215,7 +216,7 @@ async function ingestDataset(name, file, info) {
       : await icall("convert", { options: d.options, packages: d.adapter.packages, key, prefix: `${manifest.name}.${name}.` });
     const original = found.fingerprint === d.sha256;
     if (ctl.cancelled) throw new Error("cancelled");
-    await mountDataset(name, [{ rel: d.adapter.output, blob: out.file }], { ...info, original, fingerprint: found.fingerprint, rows: out.rows, cached: !!out.cached,
+    await mountDataset(name, [{ rel: d.adapter.output, blob: out.file }], { ...info, original, key: found.fingerprint, rows: out.rows, cached: !!out.cached,
       store: out.store, seconds: (performance.now() - t0) / 1000, layer: found.layer,
       note: original ? (info.original ? null : "identical to the recorded dataset (fingerprint)") : "differs from the recorded dataset: runs are modified" });
   } catch (e) {
@@ -248,7 +249,7 @@ async function loadFormatted(name) {
   const d = datasets[name];
   const hit = await cacheLookup(cacheKey(name, d.sha256));   // a served app converts a given file once
   if (hit) return mountDataset(name, [{ rel: d.adapter.output, blob: hit.file }],
-    { original: true, source: d.source, rows: hit.meta.rows, cached: true, store: "opfs", seconds: 0 });
+    { original: true, key: d.sha256, source: d.source, rows: hit.meta.rows, cached: true, store: "opfs", seconds: 0 });
   let entries;
   try { entries = await originalEntries(d); } catch (e) { state.data[name] = { status: "error", note: e.message }; refresh(); return; }
   if (!entries) { state.data[name] = { status: "waiting", note: "provide this file to run" }; refresh(); return; }
@@ -272,83 +273,72 @@ async function loadOriginal(name) {
   let entries;
   try { entries = await originalEntries(d); } catch (e) { state.data[name] = { status: "error", note: e.message }; refresh(); return; }
   if (!entries) { state.data[name] = { status: "waiting", note: "provide this file to run" }; refresh(); return; }
-  await mountDataset(name, entries, { original: true, source: d.source });
+  await mountDataset(name, entries, { original: true, key: d.sha256, source: d.source });
 }
 async function provideFile(name, file) {
   const d = datasets[name];
   if (d.kind !== "file") throw new Error(`${name} is a directory dataset; only file datasets can be swapped`);
-  markStale(order.filter((n) => nodeData(n).some((x) => x.name === name)));   // results from the old data are stale at once
+  dataChanged(name);   // results from the old data are stale at once, before the new data is there
   if (d.format) {
     cancelIngest(name);
     const res = await ingestDataset(name, file, { original: false, file: file.name, source: d.source === "user" ? "user" : "file" });
     if (res.status !== "mounted") throw new Error(res.note);
-    dataChanged(name);
     refresh();
     return res;
   }
   const entry = { rel: d.files[0].rel, blob: file };
-  // A file of the recorded size may be the original: hashed once mounted, so it is "checking" until then.
-  const maybe = file.size === d.size;
-  await mountDataset(name, [entry], { original: false, file: file.name, source: "file", note: maybe ? "checking sha256…" : undefined });
+  await mountDataset(name, [entry], { original: false, file: file.name, source: "file", note: "checking sha256…" });
   if (state.data[name].status !== "mounted") throw new Error(state.data[name].note);
-  // Hash in the worker, reading the mounted file in chunks (never loaded whole).
-  let original = false;
-  if (maybe) original = (await call("sha256", { path: `${state.data[name].root}/${entry.rel}` })) === d.files[0].sha256;
-  state.data[name] = { ...state.data[name], original, note: original ? "identical to the recorded dataset (sha256)" : "differs from the recorded dataset: runs are modified" };
-  dataChanged(name);
+  // Its key: hashed in the worker, reading the mounted file in chunks (never loaded whole).
+  const sha = await call("sha256", { path: `${state.data[name].root}/${entry.rel}` });
+  const original = sha === d.files[0].sha256;
+  state.data[name] = { ...state.data[name], original, key: original ? d.sha256 : sha,
+    note: original ? "identical to the recorded dataset (sha256)" : "differs from the recorded dataset: runs are modified" };
   refresh();
   return state.data[name];
 }
 async function restoreData(name) {
-  await loadOriginal(name);
   dataChanged(name);
+  await loadOriginal(name);
   refresh();
 }
 
 // ------------------------------------------------------------------ running
 // The worker runs the graph: every node whose key (its code, settings and inputs) changed,
-// cached ones reported as such. With auto on, a change runs at once; Run runs what is
-// stale, or, when everything is current, everything again.
-const dataKey = (name) => { const st = state.data[name] || {}, d = datasets[name];
-  return st.original ? d.sha256 : st.fingerprint || `${st.file}:${st.size}:${st.mtime || ""}`; };
+// cached ones reported as such, and returns the run file of the graph as it now stands
+// (blocks.runs). Nothing runs until Run is pressed (or an agent runs): a change only makes
+// what it reaches stale. Run runs what is stale, or, when everything is current, everything.
 async function runGraph(source = "ui", rerunAll = false) {
   if (!state.ready || !dataReady()) return { ok: false, error: !state.ready ? "runtime not ready" : "datasets not loaded" };
-  if (state.busy) { state.again = source; return { ok: false, error: "already running" }; }
+  if (state.busy) return { ok: false, error: "already running" };
   state.busy = true;
   state.hasRun = true;
   for (const n of order) if (state.node[n].status !== "done") state.node[n] = { ...state.node[n], status: "running" };
   renderHeader(); renderGraph();
   setStatus("Running…");
-  const t0 = performance.now();
   let res;
-  try {
-    res = await call("run", { settings: state.settings, dataKeys: Object.fromEntries(manifest.datasets.map((d) => [d.name, dataKey(d.name)])),
-      only: rerunAll ? order : null });
-  } catch (e) { res = Object.fromEntries(order.map((n) => [n, { status: "error", error: errorLine(e) }])); }
-  for (const n of order) state.node[n] = { ...res[n], data: Object.fromEntries(nodeData(n).map((d) => [d.name, dataStatus(d)])) };
+  try { res = await call("run", { settings: state.settings, data: dataRecord(), only: rerunAll ? order : null, source }); }
+  catch (e) { res = { nodes: Object.fromEntries(order.map((n) => [n, { status: "error", error: errorLine(e) }])), record: null }; }
+  for (const n of order) state.node[n] = { ...res.nodes[n], data: Object.fromEntries(nodeData(n).map((d) => [d.name, dataStatus(d)])) };
+  state.current = res.record;
   state.busy = false;
   const failed = order.find((n) => state.node[n].status === "error") || null;
-  const computed = order.filter((n) => res[n] && res[n].status === "done" && !res[n].cached);
+  const computed = res.record ? res.record.ran : [];
   let run = null;
-  if (!failed && computed.length) run = await recordRun(source, (performance.now() - t0) / 1000, computed);
+  if (res.record && res.record.complete && computed.length) run = await keepRun(res.record);
+  await compareRuns();
   setStatus(progress());
   refresh();
-  if (state.again) { const again = state.again; state.again = null; return runGraph(again); }
   return { ok: !failed, failed, computed, run };
 }
 const progress = () => `${order.filter((n) => state.node[n].status === "done").length}/${order.length} nodes current`;
+// A change of settings or data: what it reaches is stale until the next run.
 function markStale(names) {
   for (const n of descendants(names)) if (["done", "error", "blocked"].includes(state.node[n].status)) state.node[n] = { ...state.node[n], status: "stale" };
   if (state.hasRun) setStatus(progress());
   renderGraph(); notifyViews();
 }
-// A change of settings or data: mark what it reaches stale, and run it when auto is on.
-let autoTimer = null;
-function changed(names) {
-  markStale(names);
-  if (state.auto && state.hasRun) { clearTimeout(autoTimer); autoTimer = setTimeout(() => runGraph("auto"), 250); }
-}
-const dataChanged = (name) => changed(order.filter((n) => nodeData(n).some((x) => x.name === name)));
+const dataChanged = (name) => markStale(order.filter((n) => nodeData(n).some((x) => x.name === name)));
 async function setSettings(values) {
   const warnings = [], touched = new Set();
   for (const [k, v] of Object.entries(values)) {
@@ -361,7 +351,7 @@ async function setSettings(values) {
     state.settings[k] = val;
     touched.add(k.split(".")[0]);
   }
-  if (touched.size) changed([...touched]);
+  if (touched.size) markStale([...touched]);
   return warnings;
 }
 async function resetAll() {
@@ -369,61 +359,18 @@ async function resetAll() {
   for (const name of swappedData()) await loadOriginal(name);
 }
 
-// ------------------------------------------------------------------ run log
-// Every run that computed something is one row: what changed, the headline, how long it
-// took. Linked builds keep it on the dev server (runs.jsonl next to the app); a built app
-// keeps it in memory and can export it as JSON.
-async function loadRuns() {
-  if (!linked || !manifest.api) return;
-  try {
-    const r = await fetch(manifest.api, { cache: "no-store" });
-    if (r.ok) state.runs = (await r.json()).runs || [];
-  } catch { /* server without a run log */ }
-}
-async function recordRun(source, seconds, ran) {
-  const run = {
-    id: `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, at: new Date().toISOString(), source,
-    settings: changedSettings(), data: Object.fromEntries(swappedData().map((n) => [n, state.data[n].file])),
-    headline: headlineNow(), ran, seconds: Number(seconds.toFixed(3)), code_sha: manifest.code_sha,
-  };
-  state.runs.push(run);
-  state.lastRunAt = Date.now();
-  if (linked && manifest.api && !harvest) {
-    try { await fetch(manifest.api, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(run) }); } catch (e) { console.warn("run not saved", e); }
-  }
-  return run;
-}
-function bestRuns() {
-  const best = {};
-  for (const m of headline) for (const r of state.runs) {
-    const v = r.headline[m.id];
-    if (typeof v === "number" && Number.isFinite(v) && (best[m.id] === undefined || better(m, v, best[m.id].v))) best[m.id] = { v, id: r.id };
-  }
-  return best;
-}
-
-// ------------------------------------------------------------------ this run as a run file
-// A run file (blocks-run/1, docs/runs.md) records one complete run: the settings and data,
-// and per node its metrics, the digest of its output and its blocks. Download run saves it;
-// verification compares it; the Data modal loads earlier ones to compare with.
-const RUN_FORMAT = "blocks-run/1";
-const stampName = (d) => new Date(d).toISOString().slice(0, 19).replace(/:/g, "-");
-// Every node done and current: a run file records a complete run.
-const current = () => state.ready && !state.busy && order.every((n) => state.node[n].status === "done");
-const ran = (n) => state.node[n].status === "done" || state.node[n].status === "stale" && !!state.node[n].blocks;
+// ------------------------------------------------------------------ this run
+// The data a run reads, by key (blocks.runs): the same key the graph's cache uses.
 function dataRecord() {
   return Object.fromEntries(manifest.datasets.map((d) => { const x = state.data[d.name] || {};
-    return [d.name, x.original ? { original: true, sha256: d.sha256 } : { original: false, file: x.file || null }]; }));
+    return [d.name, { key: x.key || null, original: !!x.original, ...(x.original ? {} : { file: x.file || null }) }]; }));
 }
+// Every node done and current: the run file records a complete run.
+const current = () => state.ready && !state.busy && !!state.current && order.every((n) => state.node[n].status === "done");
+const ran = (n) => state.node[n].status === "done" || state.node[n].status === "stale" && !!state.node[n].blocks;
 function runFile(name) {
   if (!current()) throw new Error("run the whole graph first: a run file records a complete, current run");
-  return { format: RUN_FORMAT, name: name || stampName(state.lastRunAt || Date.now()), app: manifest.id, project: manifest.project,
-    title: manifest.title, made: new Date(state.lastRunAt || Date.now()).toISOString(), code_sha: manifest.code_sha,
-    runtime: { pyodide: manifest.runtime.pyodide, python: state.python || manifest.runtime.python, packages: manifest.runtime.packages },
-    settings: { ...state.settings }, changed_settings: changedSettings(), data: dataRecord(),
-    nodes: Object.fromEntries(order.map((n) => { const s = state.node[n];
-      return [n, { status: s.status, seconds: s.seconds ?? null, metrics: s.metrics || {}, digest: s.digest || null, blocks: s.blocks || [] }]; })),
-    headline: headlineNow() };
+  return name ? { ...state.current, name } : state.current;
 }
 function downloadRun() {
   const run = runFile();

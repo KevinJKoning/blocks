@@ -8,7 +8,7 @@ Routes (127.0.0.1 only):
   /_runtime/pele/<ver>/pele.global.js   browser caches them once for every app build)
   /_data/<app>/<dataset>/<rel>        an app's datasets, read in place (ETag, revalidated);
                                       <app> is the project, or <project>--<name> for a superseded one
-  /_api/runs/<app>                    GET the run log, POST one run (appends runs.jsonl)
+  /_api/runs/<app>                    GET the run log, POST one run file (appends runs.jsonl)
 
 Each app page is a single HTML file holding the app's code, params, plugins and shipped
 runs; only the heavy, shared parts (runtime, pele, data) come from here.
@@ -28,11 +28,13 @@ from urllib.parse import unquote, urlsplit
 import html
 
 from . import build, spec
+from blocks import runs
+
 from .runlog import read_runs, runs_path
 from .runtime import Runtime
 
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-MAX_RUN_BYTES = 1 << 20
+MAX_RUN_BYTES = 8 << 20   # a run file, its blocks included
 
 
 def _safe(*parts: str) -> bool:
@@ -148,14 +150,14 @@ class Handler(BaseHTTPRequestHandler):
             run = json.loads(self.rfile.read(n))
         except json.JSONDecodeError:
             return self._error(HTTPStatus.BAD_REQUEST, "not JSON")
-        if not isinstance(run, dict) or "id" not in run:
-            return self._error(HTTPStatus.BAD_REQUEST, "want a run object with an id")
+        if not isinstance(run, dict) or run.get("format") != runs.FORMAT or not isinstance(run.get("name"), str):
+            return self._error(HTTPStatus.BAD_REQUEST, f"want a {runs.FORMAT} run file")
         dest = runs_path(self.repo, *app_of(parts[2]))
         if not dest.parent.is_dir():
             return self._error(HTTPStatus.NOT_FOUND, "no such app")
         with self._append, dest.open("a") as f:
             f.write(json.dumps(run, separators=(",", ":")) + "\n")
-        return self._json({"ok": True, "id": run["id"]})
+        return self._json({"ok": True, "name": run["name"]})
 
     # -- handlers ---------------------------------------------------------------
     @staticmethod

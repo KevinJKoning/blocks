@@ -74,16 +74,18 @@ def test_many_concurrent_requests_are_all_served(server):
 
 def test_runs_api(server, repo, older):
     post = lambda body, ctype="application/json", path=RUNS: fetch(server + path, data=body, headers={"Content-Type": ctype})
-    assert post(json.dumps({"id": "r1", "headline": {"x": 1}}).encode())[0] == 200
-    assert post(b"id=r2", "application/x-www-form-urlencoded")[0] == 415
+    run = lambda name: json.dumps({"format": "blocks-run/1", "name": name, "headline": {"x": 1}}).encode()
+    assert post(run("r1"))[0] == 200
+    assert post(b"name=r2", "application/x-www-form-urlencoded")[0] == 415
     assert post(b"[1]")[0] == 400
     assert post(b"{")[0] == 400
+    assert post(b'{"id": "r2"}')[0] == 400                        # the run log holds run files only
     status, _, body = fetch(server + RUNS)
-    assert [r["id"] for r in json.loads(body)["runs"]] == ["r1"]
+    assert [r["name"] for r in json.loads(body)["runs"]] == ["r1"]
     assert (spec.app_dir(repo, SENSOR) / "runs.jsonl").is_file()
-    assert post(b'{"id": "r3"}', path=f"{RUNS}--older")[0] == 200
+    assert post(run("r3"), path=f"{RUNS}--older")[0] == 200
     assert (spec.app_dir(repo, SENSOR, "older") / "runs.jsonl").is_file()
-    assert post(b'{"id": 1}', path="/_api/runs/nope")[0] == 404
+    assert post(run("r4"), path="/_api/runs/nope")[0] == 404
 
 
 def test_other_host_names_are_refused(server):

@@ -95,7 +95,7 @@ over the port, and the host checks every request against the view's declaration.
 | `bridge.on("theme", fn)` | — | theme or mode changed |
 | `bridge.read(name)` | in `reads` | a node's output as JSON (numpy arrays as lists, tables as `{columns, rows}`), or a dataset's bytes (up to 64 MB) |
 | `bridge.settings()` | — | current settings and their ranges (read-only) |
-| `bridge.setSettings(values)` | `can: params` (Data modal only) | same validation as Settings; a change runs as any change does |
+| `bridge.setSettings(values)` | `can: params` (Data modal only) | same validation as Settings; a change makes what it reaches stale, as any change does |
 | `bridge.query(sql, limit)` | `can: query` | DuckDB in the worker on a connection locked to the datasets the view reads |
 | `bridge.download(name, data, type)` | `can: download` | the host's download (the sandbox blocks the frame's own) |
 

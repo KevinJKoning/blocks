@@ -9,8 +9,8 @@ session: a dataset's state and check, the settings as controls, a node's results
 ## A node's page
 
 1. its docstring: what it does and why;
-2. its **settings as live controls** (changing one runs what it reaches, so with Auto on
-   its results below change as you watch);
+2. its **settings as live controls** (changing one makes what it reaches stale; Run, and
+   its results below change);
 3. its **results**: whether they are current (stale, from the cache, failed, blocked), the
    switch to the reference run's results, and the blocks its view made ("Not run yet"
    until it has run), then its log;

@@ -20,8 +20,8 @@ function nodeMetrics(n) {
   const decl = declaredFor(n).sort((a, b) => b.headline - a.headline).slice(0, METRIC_LINES);
   const now = ran(n) ? state.node[n].metrics || {} : null;
   return decl.map((m) => {
-    const v = now ? now[m.key] : undefined, b = refMetric(m);
-    return [m, v, differs(v, b) ? `(Δ ${signed(v - b)})` : ""];
+    const v = now ? now[m.key] : undefined, c = now ? metricCell(n, m.key) : null;
+    return [m, v, c && c.differs && c.delta !== null ? `(Δ ${signed(c.delta)})` : ""];
   });
 }
 function metricLine(m, v, suffix) {

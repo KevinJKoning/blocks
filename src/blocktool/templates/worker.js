@@ -319,7 +319,9 @@ const handlers = {
   inspect: ({ options }) => JSON.parse(py.globals.get("_inspect")(ingest.path, JSON.stringify(options))),
   convert: ingestConvert,
   // the graph: every node whose key changed (or the named ones), cached ones reported as such
-  run: ({ settings, dataKeys, only }) => JSON.parse(session.run(JSON.stringify(settings), JSON.stringify(dataKeys), JSON.stringify(only || null))),
+  run: ({ settings, data, only, source }) => JSON.parse(session.run(JSON.stringify(settings), JSON.stringify(data), JSON.stringify(only || null), source || "ui")),
+  compare: ({ run, ref }) => JSON.parse(session.compare(JSON.stringify(run), JSON.stringify(ref || null))),
+  summarize: ({ runs, ref }) => JSON.parse(session.summarize(JSON.stringify(runs), JSON.stringify(ref || null))),
   output: ({ name }) => JSON.parse(session.output(name)),
   readText: ({ path, limit }) => readText(path, limit),
   readBytes: ({ path }) => py.FS.readFile(`${ROOT}/${path}`),

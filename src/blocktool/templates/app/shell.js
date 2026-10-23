@@ -142,8 +142,8 @@ function themePicker() {
       `${x.label} · ${m === "light" ? "Light" : "Dark"}`)))));
 }
 
-// ---- header: the app (its title opens the overview), Data, Settings, Run with its Auto
-// switch, Download run, and the report's show/hide switch. Nothing moves while the app loads.
+// ---- header: the app (its title opens the overview), Data, Settings, Run, Download run,
+// and the report's show/hide switch. Nothing moves while the app loads.
 function runLabel() {
   if (state.fatal) return "Unavailable";
   if (!state.ready) return "Loading";
@@ -163,8 +163,6 @@ function buildHeader() {
   const open = (name) => h("button", { class: "cap", "data-action": `open-${name}`, onclick: () => openModal(name) }, modals[name].label);
   ui.dataBtn = manifest.datasets.length ? open("data") : null;
   ui.runBtn = h("button", { class: "cap primary", "data-action": "run", title: state.statusText || "", onclick: runClicked });
-  ui.autoBox = h("input", { type: "checkbox", "data-action": "auto", checked: state.auto, onchange: (e) => { state.auto = e.target.checked; } });
-  ui.auto = h("label", { class: "cap auto", title: "Run what a change makes stale as soon as it is made" }, ui.autoBox, "Auto");
   ui.resultsBtn = h("button", { class: "cap", "data-action": "download-run", title: "This run as a run file: settings, data, and every node's metrics and blocks",
     onclick: () => { try { downloadRun(); } catch (e) { ui.resultsBtn.title = `Download failed: ${e.message}`; } } }, "Download run");
   ui.reportBtn = h("button", { class: "cap icon-only", "data-action": "toggle-report", "aria-label": "Report",
@@ -176,7 +174,7 @@ function buildHeader() {
       manifest.version ? h("span", { class: "pill" }, `superseded: ${manifest.version}`) : null,
       linked ? null : h("span", { class: "pill" }, "offline file")),
     h("nav", { class: "pills", "aria-label": "App" }, ui.dataBtn, open("settings")),
-    h("div", { class: "pills" }, ui.runBtn, ui.auto, ui.resultsBtn, ui.reportBtn));
+    h("div", { class: "pills" }, ui.runBtn, ui.resultsBtn, ui.reportBtn));
   renderHeader();
 }
 function renderHeader() {
@@ -185,7 +183,6 @@ function renderHeader() {
   ui.runBtn.disabled = !canRun();
   // Every button keeps its place from the start; Download run waits, disabled, for a complete run.
   ui.resultsBtn.disabled = !current();
-  ui.autoBox.checked = state.auto;
   // Data asks for attention only when the viewer must act (a file to provide, or one that
   // failed), never while datasets are still loading.
   if (ui.dataBtn) ui.dataBtn.classList.toggle("attention", needsViewerData());

@@ -25,7 +25,7 @@ function renderReport() {
   }
   const sel = state.sel, list = pageOf(sel), at = list.findIndex((b) => b.type === "views");
   const ctx = sel.kind === "node" ? { node: sel.name, side: shownSide(sel.name) } : {};
-  // A setting changed here re-renders the page (and, with Auto, again after the run): keep its focus.
+  // A setting changed here re-renders the page: keep its focus.
   const active = ui.report.contains(document.activeElement) && document.activeElement.closest("[data-param]");
   const focus = active && { key: active.dataset.param, type: document.activeElement.type };
   const body = h("div", {});

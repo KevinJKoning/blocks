@@ -29,6 +29,7 @@ async function boot() {
   await loadRuns();
   try { await startWorker(); } catch (e) { fatal((e && e.stack) || String(e)); return; }
   state.ready = true;
+  await compareRuns();   // the runs loaded so far, against the reference
   refresh();
   await Promise.all(manifest.datasets.map((d) => loadOriginal(d.name)));
   refresh();

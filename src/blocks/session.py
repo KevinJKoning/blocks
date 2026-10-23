@@ -1,5 +1,6 @@
-"""What the page's worker calls (templates/worker.js), in Pyodide: run the graph,
-read an output, describe and check datasets, DuckDB queries, hashing. Every answer is JSON."""
+"""What the page's worker calls (templates/worker.js), in Pyodide: run the graph (and make
+its run file), compare runs, read an output, describe and check datasets, DuckDB queries,
+hashing. Every answer is JSON."""
 from __future__ import annotations
 
 import hashlib
@@ -8,6 +9,7 @@ import math
 import os
 
 from . import graph as graph_mod
+from . import runs
 
 
 def browser_json(o):
@@ -26,12 +28,22 @@ def browser_json(o):
 class Session:
     def __init__(self, root, spec_json):
         self.root = os.path.abspath(root)
-        self.graph = graph_mod.Graph(self.root, json.loads(spec_json))
+        self.spec = json.loads(spec_json)
+        self.graph = graph_mod.Graph(self.root, self.spec)
         self._db = None
 
-    def run(self, settings_json, data_keys_json, only_json="null"):
-        only = json.loads(only_json)
-        return browser_json(self.graph.run(json.loads(settings_json), json.loads(data_keys_json), set(only) if only else None))
+    def run(self, settings_json, data_json, only_json="null", source="ui"):
+        """Run what changed; data is {dataset: {key, original, file}} (blocks.runs). Returns
+        {nodes: {node: result}, record: the run file of the graph as it now stands}."""
+        settings, data, only = json.loads(settings_json), json.loads(data_json), json.loads(only_json)
+        results = self.graph.run(settings, {n: d["key"] for n, d in data.items()}, set(only) if only else None)
+        return browser_json({"nodes": results, "record": runs.record(self.spec, results, settings, data, source)})
+
+    def compare(self, run_json, ref_json):
+        return browser_json(runs.compare(json.loads(run_json), json.loads(ref_json), self.spec, self.spec["verify"]))
+
+    def summarize(self, runs_json, ref_json):
+        return browser_json(runs.summarize(json.loads(runs_json), json.loads(ref_json), self.spec, self.spec["verify"]))
 
     def output(self, name):
         return browser_json(self.graph.output(name))

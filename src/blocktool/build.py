@@ -25,6 +25,8 @@ import time
 from importlib import resources
 from pathlib import Path
 
+from blocks import runs
+
 from . import docs, spec, themes
 from .runtime import Runtime
 
@@ -41,7 +43,7 @@ def template(name: str) -> bytes:
 APP_PARTS = ("base", "runtime", "runs", "shell", "dag", "blocks", "report", "render", "views", "modals", "tools", "boot")
 # The blocks library: what node files import, and the graph that runs them; written to /lib
 # in the worker.
-PYLIB = ("__init__.py", "markers.py", "ui.py", "graph.py", "session.py", "schema.py")
+PYLIB = ("__init__.py", "markers.py", "ui.py", "graph.py", "runs.py", "session.py", "schema.py")
 
 
 def pylib(rel: str) -> bytes:
@@ -180,13 +182,17 @@ def _dataset_entry(a: dict, d: dict, inline: bool) -> dict:
     return entry
 
 
-def graph_spec(a: dict) -> dict:
+def graph_spec(a: dict, rt: Runtime) -> dict:
     """The graph as the page and the worker see it: nodes with their inputs, settings, metrics
-    and docs; the edges; the order; where each dataset is mounted."""
+    and docs; the edges; the order; where each dataset is mounted; what a run file records of
+    the app (blocks.runs) and the tolerance runs are compared with."""
     keep = ("name", "file", "doc", "desc", "deps", "settings", "metrics", "view", "group")
     g = a["graph"]
     return {"order": g["order"], "edges": g["edges"], "nodes": {n: {k: g["nodes"][n][k] for k in keep} for n in g["order"]},
-            "datasets": {d["name"]: {"at": d["at"]} for d in a["datasets"].values()}}
+            "datasets": {d["name"]: {"at": d["at"]} for d in a["datasets"].values()},
+            "app": {"id": a["id"], "project": a["project"], "title": a["title"], "code_sha": a["code_sha"],
+                    "runtime": {"pyodide": rt.version, "packages": rt.versions(a["packages"])}},
+            "verify": a["verify"]}
 
 
 def build(repo: Path, project: str, version: str | None = None, inline: bool = False,
@@ -211,7 +217,7 @@ def build(repo: Path, project: str, version: str | None = None, inline: bool = F
         "plugins": [{"name": p["name"], "title": p["title"], "description": p["description"], "builtin": p["builtin"],
                      "formats": list(p["formats"]), "views": list(p["views"])} for p in plugins.values()],
         "ui": {"theme": theme, "themes": themes.catalog()},
-        "code_sha": a["code_sha"],
+        "code_sha": a["code_sha"], "run_format": runs.FORMAT,
         "runs": [{"name": n, "path": f"runs/{n}{spec.RUN_SUFFIX}"} for n in a["runs"]],
         "superseded": [] if inline else [{"name": v, "url": f"/{project}/superseded/{v}/"} for v in a["superseded"]],
         "api": None if inline else f"/_api/runs/{a['id'].replace('/', '--')}",
@@ -220,7 +226,7 @@ def build(repo: Path, project: str, version: str | None = None, inline: bool = F
         {"path": "proto/themes.css", "role": "style", "data": themes.css(theme).encode()},
         {"path": "proto/app.css", "role": "style", "data": template("app.css")},
         # the graph: what the page draws and the worker runs
-        {"path": "proto/graph.json", "role": "data", "data": json.dumps(graph_spec(a), indent=1).encode()},
+        {"path": "proto/graph.json", "role": "data", "data": json.dumps(graph_spec(a, rt), indent=1).encode()},
         {"path": "proto/worker.js", "role": "code", "data": template("worker.js")},
     ]
     comps += [{"path": f"pylib/blocks/{rel}", "role": "code", "data": pylib(rel)} for rel in PYLIB]

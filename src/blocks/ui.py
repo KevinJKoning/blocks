@@ -1,7 +1,10 @@
-"""UI blocks: what a node's view(out) returns (docs/blocks.md).
+"""UI blocks: every block the page draws, defined here once (docs/blocks.md).
 
-Every block is a plain dict ({"type": ..., "id": ...}); the page draws them. A view is a
-pure function of the node's output, so changing it never re-runs the node.
+Every block is a plain dict ({"type": ..., "id": ...}); the page draws them (one renderer,
+templates/app/blocks.js). A node's view(out) returns the first kind, made of its output; a
+view is a pure function of it, so changing it never re-runs the node. The second kind lays
+out the report's pages (blocktool.docs) and is filled by the page from this session's
+state: a view does not return them.
 
     def view(out):
         return [
@@ -42,8 +45,9 @@ def _block(kind: str, **fields) -> dict:
     return {"type": kind, **{k: v for k, v in fields.items() if v is not None}}
 
 
-def markdown(text: str, id: str | None = None) -> dict:
-    return _block("markdown", text=str(text), id=id)
+def markdown(text: str, id: str | None = None, doc: str | None = None) -> dict:
+    """Markdown; doc: the app's file it comes from (app.yaml docs:), if any."""
+    return _block("markdown", text=str(text), id=id, doc=doc)
 
 
 def metrics(values: dict | None = None, title: str | None = "Metrics", id: str = "metrics") -> dict:
@@ -79,6 +83,72 @@ def figure(image, caption: str | None = None, id: str | None = None) -> dict:
     if isinstance(image, (bytes, bytearray)):
         return _block("figure", media="image/png", data=base64.b64encode(bytes(image)).decode(), caption=caption, id=id)
     return _block("figure", media="image/svg+xml", data=str(image), caption=caption, id=id)
+
+
+# ------------------------------------------------------------------ page blocks (blocktool.docs)
+def settings(keys: list[str], title: str | None = "Settings") -> dict:
+    """Settings ("node.param") as live controls."""
+    return _block("settings", keys=list(keys), title=title)
+
+
+def results(title: str | None = "Results") -> dict:
+    """The page's node's results: its run state, then its view's blocks, then its log."""
+    return _block("results", title=title)
+
+
+def views() -> dict:
+    """Where the page's sandboxed views sit (their frames are never moved)."""
+    return _block("views")
+
+
+def fold(id: str, title: str, blocks: list[dict]) -> dict:
+    """Blocks folded away under a title; open or closed stays as the reader left it."""
+    return _block("fold", id=id, title=title, blocks=list(blocks))
+
+
+def dataset(name: str, title: str | None = "Data in", brief: bool = False) -> dict:
+    """A dataset: its source, size, what it holds, its schema and the data's check (brief: one line)."""
+    return _block("dataset", dataset=name, title=title, brief=brief or None)
+
+
+def links(items: list[dict], title: str | None = None) -> dict:
+    """Links to nodes ({"node": name}) and datasets ({"dataset": name})."""
+    return _block("links", items=list(items), title=title)
+
+
+def code(path: str, title: str | None = "Code") -> dict:
+    """A file of the app, folded."""
+    return _block("code", path=path, title=title)
+
+
+def contents(nodes: list[str], title: str | None = "Contents") -> dict:
+    """Nodes as a list, in their groups."""
+    return _block("contents", nodes=list(nodes), title=title)
+
+
+def nodes(names: list[str], title: str | None = "Nodes") -> dict:
+    """Nodes with their state and declared metrics."""
+    return _block("nodes", nodes=list(names), title=title)
+
+
+def headline(title: str | None = "Headline metrics") -> dict:
+    """The app's headline metrics: this run's, the reference's, Δ."""
+    return _block("headline", title=title)
+
+
+def changes() -> dict:
+    """What differs between this run's inputs and the reference's."""
+    return _block("changes")
+
+
+def pick(node: str, block: str) -> dict:
+    """A block of a node's results (by id), shown on another page."""
+    return _block("pick", node=node, block=block)
+
+
+def runs(title: str | None = "Runs") -> dict:
+    """Every run: where it comes from, what differs from the reference, its headline metrics."""
+    return _block("runs", title=title)
 
 
 def tabulate(rows, columns=None) -> tuple[list[str], list[list]]:

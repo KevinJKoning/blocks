@@ -1,41 +1,87 @@
-// runs.js: previous runs as data, and the one this run is compared with (docs/runs.md).
+// runs.js: runs as data, and the one this run is compared with (docs/runs.md).
 //
-// A run file (blocks-run/1) records one complete run, each node's blocks included. The Data
-// modal loads any number as previous runs, each named after its file, and an app may ship
-// some (app.yaml runs:, e.g. its baseline or a superseded version's). This run is compared
-// with one of them, the reference: the one the viewer picked, else the one named
-// "baseline", else the latest. The rule is one: a block shows the reference's version of
-// the block with the same node and id (blocks.js). Nothing of it shows before a run.
+// A run is a run file (blocks-run/1), made by the worker after every run (blocks.runs):
+// the settings and data, and per node its metrics, output digest and blocks. The page keeps
+// one list of them, state.runs, each {name, doc, from}: this session's runs ("session"),
+// earlier ones from the dev server's run log ("log"), the ones the app ships ("app", e.g.
+// its baseline or a superseded version's) and files the viewer loads ("file"). This run is
+// compared with one of them, the reference: the one the viewer picked, else the one named
+// "baseline", else the latest that is not this session's. Every comparison comes from the
+// worker (blocks.runs.compare, summarize); this file keeps the list and draws none of it.
 
+const RUN_FORMAT = manifest.run_format;   // blocks.runs.FORMAT
 const appId = manifest.id;
-state.prev = [];         // previous runs: {name, doc, from: "file" | "app"}
+state.runs = [];         // [{name, doc, from: "session" | "log" | "app" | "file"}]
+state.current = null;    // the run file of the graph as it now stands (complete or not)
 state.reference = null;  // the name the viewer picked as reference (null: the default)
+state.cmp = null;        // blocks.runs.compare(state.current, reference): per node, the headline, changes
+state.summary = null;    // blocks.runs.summarize(every run, reference): per run, and the best
 state.compare = {};      // node -> true while the viewer looks at the reference's results instead
 const runNameOf = (fileName) => fileName.replace(/\.run\.json$/i, "").replace(/\.json$/i, "");
+const freeName = (name) => { let n = name, i = 2; while (state.runs.some((r) => r.name === n)) n = `${name}-${i++}`; return n; };
 function addRun(name, doc, from = "file") {
   if (!doc || doc.format !== RUN_FORMAT) throw new Error(`${name}: not a ${RUN_FORMAT} run file`);
   if (doc.project !== manifest.project) throw new Error(`${name}: a run of the project ${doc.project}, not ${manifest.project}`);
-  state.prev = state.prev.filter((r) => r.name !== name).concat([{ name, doc, from }]);
+  state.runs = state.runs.filter((r) => r.name !== name).concat([{ name, doc, from }]);
+}
+// A run of this session: kept in the list (and in the dev server's run log, runs.jsonl).
+async function keepRun(doc) {
+  const name = freeName(doc.name);
+  const run = { name, doc: { ...doc, name }, from: "session" };
+  state.runs.push(run);
+  if (linked && manifest.api && !harvest) {
+    try { await fetch(manifest.api, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(run.doc) }); }
+    catch (e) { console.warn("run not saved", e); }
+  }
+  return run;
+}
+async function loadRuns() {
+  if (!linked || !manifest.api) return;
+  try {
+    const r = await fetch(manifest.api, { cache: "no-store" });
+    if (!r.ok) return;
+    for (const doc of (await r.json()).runs || []) if (doc && doc.format === RUN_FORMAT && doc.project === manifest.project) {
+      state.runs.push({ name: freeName(doc.name), doc, from: "log" });
+    }
+  } catch { /* server without a run log */ }
+}
+function loadShippedRuns() {
+  for (const r of manifest.runs || []) {
+    try { addRun(r.name, jsonOf(r.path), "app"); } catch (e) { console.warn(`run ${r.name} not loaded`, e); }
+  }
 }
 async function addRunFiles(files) {
   for (const f of files) addRun(runNameOf(f.name), JSON.parse(await f.text()));
+  await compareRuns();
   refresh();
 }
-function removeRun(name) {
-  state.prev = state.prev.filter((r) => r.name !== name);
+async function removeRun(name) {
+  state.runs = state.runs.filter((r) => r.name !== name);
   if (state.reference === name) state.reference = null;
+  await compareRuns();
   refresh();
 }
-function setReference(name) {
-  if (name && !state.prev.some((r) => r.name === name)) throw new Error(`no previous run ${name}`);
+async function setReference(name) {
+  if (name && !runByName(name)) throw new Error(`no run ${name}`);
   state.reference = name || null;
+  await compareRuns();
   refresh();
 }
-const reference = () => state.prev.find((r) => r.name === state.reference) || state.prev.find((r) => r.name === "baseline")
-  || [...state.prev].sort((a, b) => String(b.doc.made).localeCompare(String(a.doc.made)))[0] || null;
+const loaded = () => state.runs.filter((r) => r.from !== "session");
+const runByName = (name) => state.runs.find((r) => r.name === name) || null;
+const reference = () => runByName(state.reference) || runByName("baseline")
+  || [...loaded()].sort((a, b) => String(b.doc.made).localeCompare(String(a.doc.made)))[0] || null;
 const sameApp = (r) => r.doc.app === appId;
 const runLabel_ = (r) => `${r.name}${sameApp(r) ? "" : ` (${String(r.doc.app).split("/").pop()})`}`;
-const runByName = (name) => name === "reference" ? reference() : state.prev.find((r) => r.name === name) || null;
+// Ask the worker to compare this run with the reference, and every run with it.
+async function compareRuns() {
+  if (!state.ready) return;
+  const r = reference();
+  try {
+    state.cmp = state.current && r ? await call("compare", { run: state.current, ref: r.doc }) : null;
+    state.summary = await call("summarize", { runs: state.runs.map((x) => x.doc), ref: r ? r.doc : null });
+  } catch (e) { console.warn("runs not compared", e); }
+}
 // The reference's record of node n (status, seconds, metrics, digest, blocks), or null.
 function refNode(n) {
   const r = reference(), s = r && (r.doc.nodes || {})[n];
@@ -50,29 +96,14 @@ function setShown(n, onReference) {
   state.compare[n] = onReference;
   renderReport(); notifyViews();
 }
-const differs = (v, b) => typeof v === "number" && typeof b === "number" && Math.abs(v - b) > Math.max(tol.abs_tol, tol.rel_tol * Math.abs(b));
+// The comparison's cells (blocks.runs.cell): a node's metric, a metrics block's item, a headline metric.
+const metricCell = (n, key) => state.cmp && state.cmp.nodes[n] ? state.cmp.nodes[n].metrics[key] || null : null;
+const blockCell = (n, id, key) => { const b = state.cmp && state.cmp.nodes[n] && state.cmp.nodes[n].blocks[id]; return b ? b[key] || null : null; };
+const headlineCell = (id) => state.cmp ? state.cmp.headline[id] || null : null;
+const headlineNow = () => (state.current || {}).headline || {};
 const signed = (d) => (d > 0 ? "+" : "") + fmt(d);
-// A metric of the reference: from its node record (declared ones are in every run file).
-const refMetric = (m) => metricValue(refNode(m.node), m);
-// What changed between this run and a previous one: settings, and data that is not the same.
-function changesFrom(r) {
-  if (!r) return [];
-  const out = [];
-  for (const k of new Set([...Object.keys(state.settings), ...Object.keys(r.doc.settings || {})])) {
-    if (!same(state.settings[k], (r.doc.settings || {})[k])) out.push(`${k} ${fmt((r.doc.settings || {})[k])} → ${fmt(state.settings[k])}`);
-  }
-  for (const [name, d] of Object.entries(dataRecord())) {
-    const theirs = (r.doc.data || {})[name] || {};
-    const same_ = d.sha256 && theirs.sha256 ? d.sha256 === theirs.sha256 : d.original && theirs.original;
-    if (!same_) out.push(`${name}: ${theirs.file || (theirs.original ? "original" : "other data")} → ${d.file || (d.original ? "original" : "other data")}`);
-  }
-  if (!sameApp(r)) out.unshift(`app ${r.doc.app} → ${appId}`);
-  return out;
-}
-const changesLine = (r) => { const c = changesFrom(r);
-  return h("p", { class: "small muted", "data-changes": "" }, c.length ? `Compared with ${runLabel_(r)}: ${c.join("; ")}.` : `Same settings and data as ${runLabel_(r)}.`); };
-function loadShippedRuns() {
-  for (const r of manifest.runs || []) {
-    try { addRun(r.name, jsonOf(r.path), "app"); } catch (e) { console.warn(`run ${r.name} not loaded`, e); }
-  }
-}
+// What changed between two runs' inputs (blocks.runs.changes), in words.
+const changeText = (c) => c.kind === "app" ? `app ${c.from} → ${c.to}` : c.kind === "setting" ? `${c.key} ${fmt(c.from)} → ${fmt(c.to)}`
+  : `${c.key}: ${c.from || "none"} → ${c.to || "none"}`;
+const changesLine = (r) => { const c = state.cmp ? state.cmp.changes : [];
+  return h("p", { class: "small muted", "data-changes": "" }, c.length ? `Compared with ${runLabel_(r)}: ${c.map(changeText).join("; ")}.` : `Same settings and data as ${runLabel_(r)}.`); };
